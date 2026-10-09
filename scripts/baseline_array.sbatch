@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --account=def-nahee_cpu
 #SBATCH --job-name=pharos_base
-#SBATCH --time=01:00:00
+#SBATCH --time=04:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=8G
+#SBATCH --mem=32G
 #SBATCH --array=0-11
 #SBATCH --output=logs/baseline_%A_%a.out
 # 4 target edge types x 3 seeds = 12 tasks. Usage: sbatch scripts/baseline_array.sbatch [GRAPH_PREFIX] [TAG]
