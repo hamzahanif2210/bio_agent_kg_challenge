@@ -6,6 +6,7 @@ Usage: python -m bioagent.ingest.pharos OUT_PREFIX [--limit N]
 """
 import argparse
 import json
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,17 +17,18 @@ import requests
 from bioagent.schema.kg import write_kg
 
 URL = "https://pharos-api.ncats.io/graphql"
-CACHE = Path(__file__).resolve().parents[3] / "data" / "raw" / "pharos"
-PAGE = 50
+CACHE = Path(__file__).resolve().parents[3] / "data" / "raw" / "pharos_full"  # pharos/ holds the old truncated pages
+PAGE = 20
+# Pharos returns only 10 items per nested list (20 for GO) unless `top` is given; queries below use top:5000.
 
 # skip/top live on the *inner* targets field; the outer ones are ignored.
 QUERY = """
 query($skip:Int,$top:Int){ targets{ targets(skip:$skip, top:$top){
   uniprot sym name tdl
-  diseases{ name mondoID }
-  ligands{ ligid name isdrug }
-  ppis{ type target{ uniprot } }
-  go{ goid term type }
+  diseases(top:5000){ name mondoID }
+  ligands(top:5000){ ligid name isdrug }
+  ppis(top:5000){ type target{ uniprot } }
+  go(top:5000){ goid term type }
 } } }"""
 
 GO_TYPE = {"F": "biolink:MolecularActivity", "P": "biolink:BiologicalProcess",
@@ -66,6 +68,43 @@ def fetch(limit=None):
         if len(page) < top:
             break
     return out
+
+
+TARGET_QUERY = """
+query($q:ITarget){ target(q:$q){
+  uniprot sym name tdl
+  diseases(top:5000){ name mondoID }
+  ligands(top:5000){ ligid name isdrug }
+  ppis(top:5000){ type target{ uniprot } }
+  go(top:5000){ goid term type }
+} }"""
+TARGET_CACHE = CACHE.parent / "pharos_targets"
+_UNIPROT = re.compile(r"^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})$")
+
+
+def fetch_target(identifier, retries=3):
+    """One target by gene symbol or UniProt accession (live API, cached on disk).
+    Returns the target dict, or None if Pharos has no such target."""
+    ident = identifier.strip()
+    q = {"uniprot": ident.upper()} if _UNIPROT.match(ident.upper()) else {"sym": ident}
+    TARGET_CACHE.mkdir(parents=True, exist_ok=True)
+    f = TARGET_CACHE / (re.sub(r"[^A-Za-z0-9_.-]", "_", ident.upper()) + ".json")
+    if f.exists():
+        return json.loads(f.read_text())
+    for i in range(retries):
+        try:
+            r = requests.post(URL, json={"query": TARGET_QUERY, "variables": {"q": q}}, timeout=60)
+            r.raise_for_status()
+            body = r.json()
+            if "errors" in body:
+                raise RuntimeError(body["errors"][0]["message"])
+            t = body["data"]["target"]
+            f.write_text(json.dumps(t))
+            return t
+        except Exception:
+            if i == retries - 1:
+                raise
+            time.sleep(2 ** i)
 
 
 def to_kg(targets):

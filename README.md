@@ -9,7 +9,7 @@ An AI agent that autonomously builds an enriched, ontology-aligned knowledge gra
 
 ## Status
 
-Early scaffold. The schema, split, baseline evaluator and provenance explainer exist; the ingest and prune agents are placeholders (`TODO`). Nothing has been run on real Pharos data yet.
+Early stage. The schema, leakage-safe split, baseline evaluator, provenance explainer and the ingest harness (with a Pharos tool) exist; the prune agent and more source tools are still to do. The harness has been tested with a scripted model (`tests/test_harness.py`) but not yet run against the real Claude API. The Pharos baseline numbers below are provisional (see the warning).
 
 ## Approach
 
@@ -30,7 +30,10 @@ Every edge carries provenance (source, evidence, confidence, method, timestamp),
 ```
 src/bioagent/
   schema/kg.py          Shared KG contract (nodes + edges, Parquet)
-  ingest/agent.py       Ingest agent (TODO)
+  ingest/harness.py     Tool-calling loop: KGStore (validation + leak guard), LLM cache, step/token caps, JSONL log
+  ingest/tools.py       Source tools for the agent (Pharos first; add new sources here)
+  ingest/run.py         CLI: python -m bioagent.ingest.run "task" --out PREFIX (needs ANTHROPIC_API_KEY)
+  ingest/pharos.py      Pharos GraphQL loader (bulk and single target)
   clean/prune.py        Edge scoring and pruning (TODO)
   provenance/explain.py "Why does A connect to B?" lineage lookup
   eval/split.py         Fixed held-out edge split + leak guard
@@ -75,7 +78,9 @@ python -m bioagent.eval.baseline data/processed/pharos TARGET_PREDICATE
 
 The organizers' exact split, metric and baseline are still to be confirmed.
 
-### Baseline to beat (plain Pharos graph)
+### Baseline to beat (plain Pharos graph) — PROVISIONAL, truncated graph
+
+> **Warning:** this table was computed on a graph fetched with the Pharos API's default list limits, which return only the first 10 diseases, ligands and interactions (20 GO terms) per target. Example: EGFR has 1,356 interactions, 2,419 ligands and 193 diseases in Pharos, but only about 10 of each are in this graph. The fetch code is fixed (`top:5000`), but the full graph has not been re-fetched, so **these numbers must be recomputed before they are used as the baseline.**
 
 GraphSAGE with learned embeddings (no node features), 100 epochs, mean ± std over 3 seeds, test AUROC. Produced by `scripts/baseline_array.sbatch` and summarized by `python scripts/summarize_runs.py pharos`. Graph: 52,860 nodes, 534,213 edges (fetched from the Pharos GraphQL API on 2026-10-08).
 
