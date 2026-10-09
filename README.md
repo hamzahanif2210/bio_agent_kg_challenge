@@ -75,13 +75,26 @@ python -m bioagent.eval.baseline data/processed/pharos TARGET_PREDICATE
 
 The organizers' exact split, metric and baseline are still to be confirmed.
 
+### Baseline to beat (plain Pharos graph)
+
+GraphSAGE with learned embeddings (no node features), 100 epochs, mean ± std over 3 seeds, test AUROC. Produced by `scripts/baseline_array.sbatch` and summarized by `python scripts/summarize_runs.py pharos`. Graph: 52,860 nodes, 534,213 edges (fetched from the Pharos GraphQL API on 2026-10-08).
+
+| Target edges | Test pairs | Random neg. | Same-type neg. | Hard neg. (type + degree) |
+|---|---|---|---|---|
+| protein-disease | 12,673 | 0.687 ± 0.005 | 0.967 ± 0.001 | **0.517 ± 0.003** |
+| protein-GO term | 20,249 | 0.700 ± 0.010 | 0.905 ± 0.005 | **0.591 ± 0.011** |
+| ligand-protein | 1,720 | 0.585 ± 0.006 | 0.675 ± 0.005 | **0.678 ± 0.007** |
+| protein-protein | 14,858 | 0.712 ± 0.008 | 0.724 ± 0.017 | **0.710 ± 0.019** |
+
+Trust the hard-negative column. Protein-disease drops from 0.967 to 0.517 once negatives match in degree, so the model mostly learns node popularity. Protein-protein is the most stable target. These numbers use our own GNN; the organizers' protocol is still unconfirmed.
+
 ### Leakage rules (from the literature survey, `documents/muse-1.md`)
 
 Published biomedical link-prediction scores are often inflated. Our results only count if we follow these:
 
-- **No reverse-edge leakage:** an edge and its reverse (B→A for A→B) must never fall in different splits. *(The current `eval/split.py` treats edges as directed and does not do this yet.)*
+- **No reverse-edge leakage:** an edge and its reverse (B→A for A→B) must never fall in different splits. *(Implemented in `eval/split.py`: splits are by unordered pair.)*
 - **No enrichment leakage:** any edge pulled from an external KG (OptimusKG, Monarch, Open Targets...) must be checked against the held-out set and dropped if it duplicates a held-out edge, including near-duplicates and reverse relations.
-- **Hard negatives:** random negatives overstate performance (GNNs reported near 0.99 AUC fell to about 0.51 under degree-matched negatives). Also report degree-matched or two-hop negatives, and AUPRC as well as AUROC. *(The current `eval/baseline.py` uses random negatives only.)*
+- **Hard negatives:** random negatives overstate performance (GNNs reported near 0.99 AUC fell to about 0.51 under degree-matched negatives). Also report degree-matched or two-hop negatives, and AUPRC as well as AUROC. *(Implemented in `eval/baseline.py`: random, same-type and degree-matched negatives are all reported.)*
 - Always record the split, negative-sampling scheme and seed with every reported number.
 
 ## Design principles
