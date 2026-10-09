@@ -5,7 +5,7 @@ import numpy as np
 
 def split_edges(edges, target_predicate, val=0.1, test=0.1, seed=0):
     rng = np.random.default_rng(seed)
-    idx = edges.index[edges.predicate == target_predicate].to_numpy()
+    idx = np.array(edges.index[edges.predicate == target_predicate])
     rng.shuffle(idx)
     n_te, n_va = int(len(idx) * test), int(len(idx) * val)
     return idx[:n_te], idx[n_te:n_te + n_va], idx[n_te + n_va:]
