@@ -69,6 +69,20 @@ Lower-priority items from the survey: LLM_sim per-triple judge (no code), DRKG w
 - **explainable-ai-adr** (himanshu-kr7, MIT): edge-occlusion explanations; AUC 0.9922 under random negatives vs 0.5087 under hard negatives. https://github.com/himanshu-kr7/explainable-ai-adr
 - **559_rag-gnn** (course project, no license): rationale faithfulness only 57%. https://github.com/shouyuwang08/559_rag-gnn
 
+## MICCAI 2026 additions
+
+Source: `documents/miccai.md`, a second survey by another LLM covering MICCAI 2026 main and satellite indexes. It found **no paper that does biomedical KG construction or link prediction directly** (zero title hits for "knowledge graph" and "link prediction"), so the value is in transferable methods. Same caveat as above: unverified, check before relying on it.
+
+- **NeRD** (MICCAI 2026, arXiv:2606.15617): distills LLM reasoning into compact ontology-grounded concept chains (6 concepts vs 28/32, about 20x faster inference). Idea: short ontology-based explanation paths for prune and predict decisions. Targets pruning, explainability and standards together. No code seen.
+- **ClinRAG-GRAPH** (MICCAI 2026, arXiv:2607.00798, code available): relation-aware GCN on a clinical-prior graph plus LLM subgraph retrieval for evidence-grounded interpretation (AUC 0.815). Idea: use the encoder for the link-prediction head and the subgraph pattern for provenance.
+- **ConceptAlignE-G** (MICCAI 2026 early accept, code available): probabilistic concept edges with clinician intervention that propagates without retraining. Idea: a pattern for the Clean loop; edge weights double as pruning scores.
+- **GraphRAG vs RAG-only vs KG-only** (MDPI Bioengineering 2026): negative result. KG-only retrieval scored 50.9% vs 96.4% for RAG-only. Lesson: don't rely on raw KG lookup for the natural-language interface; a hybrid is better.
+- **KGLMQA** (PeerJ 2026): KG-RAG module blueprint for the natural-language filtering and querying step.
+
+The survey's conclusion is that the top-5 plan above is unchanged. MICCAI refines three steps: NeRD-style explanation paths (Clean and explainability), a relation-aware GCN encoder (link-prediction head), and ConceptAlignE-G edge weights (pruning signals).
+
+About 15 workshop titles (CLAP-4-QnA, PathTrace, Grounded Ontology Walker, MEC, DermAgent, CURA and others) appeared in the indexes but could not be opened. Do not cite them.
+
 ## Resources and tooling
 
 | Resource | Size / role | License | Notes |

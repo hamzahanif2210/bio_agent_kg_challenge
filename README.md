@@ -103,7 +103,8 @@ Ideas from the survey, roughly in priority order. All are unverified claims from
 4. Clean step: per-edge LLM judge grounded in retrieved evidence, with multi-model consensus for low-confidence edges.
 5. Link-prediction boosters: an ablation of which enrichment edge types help, LLM text embeddings as node features, and node-type-aware negative sampling.
 6. Maintain step: never delete contradicted edges; invalidate them with `valid_from` / `valid_to` columns.
-7. Explainability: log supporting paths and a leave-one-edge-out attribution per predicted link.
+7. Explainability: log supporting paths and a leave-one-edge-out attribution per predicted link; try short ontology-grounded explanation paths (NeRD-style, see `docs/literature.md`).
+8. Use a hybrid (retrieval plus graph) for the natural-language interface, not raw KG lookup alone: a 2026 study reports KG-only retrieval at 50.9% vs 96.4% for RAG-only.
 
 ## Data sources and licenses
 
