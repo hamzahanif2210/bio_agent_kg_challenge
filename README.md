@@ -9,7 +9,7 @@ An AI agent that autonomously builds an enriched, ontology-aligned knowledge gra
 
 ## Status
 
-Early stage. The schema, leakage-safe split, baseline evaluator, provenance explainer and the ingest harness (with a Pharos tool) exist; the prune agent and more source tools are still to do. The harness has been tested with a scripted model (`tests/test_harness.py`) but not yet run against the real Claude API. The Pharos baseline numbers below are provisional (see the warning).
+Early stage. The schema, leakage-safe split, baseline evaluator, provenance explainer and the ingest harness (with a Pharos tool) exist; the prune agent and more source tools are still to do. The harness has been tested with a scripted model (`tests/test_harness.py`) but not yet run against the real Claude API.
 
 ## Approach
 
@@ -78,20 +78,18 @@ python -m bioagent.eval.baseline data/processed/pharos TARGET_PREDICATE
 
 The organizers' exact split, metric and baseline are still to be confirmed.
 
-### Baseline to beat (plain Pharos graph) — PROVISIONAL, truncated graph
+### Baseline to beat (full Pharos graph)
 
-> **Warning:** this table was computed on a graph fetched with the Pharos API's default list limits, which return only the first 10 diseases, ligands and interactions (20 GO terms) per target. Example: EGFR has 1,356 interactions, 2,419 ligands and 193 diseases in Pharos, but only about 10 of each are in this graph. The fetch code is fixed (`top:5000`), but the full graph has not been re-fetched, so **these numbers must be recomputed before they are used as the baseline.**
-
-GraphSAGE with learned embeddings (no node features), 100 epochs, mean ± std over 3 seeds, test AUROC. Produced by `scripts/baseline_array.sbatch` and summarized by `python scripts/summarize_runs.py pharos`. Graph: 52,860 nodes, 534,213 edges (fetched from the Pharos GraphQL API on 2026-10-08).
+GraphSAGE with learned embeddings (no node features), 100 epochs, mean ± std over 3 seeds, test AUROC. Produced by `sbatch scripts/baseline_array.sbatch data/processed/pharos_full pharosfull` and summarized by `python scripts/summarize_runs.py pharosfull`. Graph: 397,636 nodes, 3,091,048 edges, fetched from the Pharos GraphQL API on 2026-10-09 with full nested lists (`top:5000`; the API default of 10 per list truncates the graph badly).
 
 | Target edges | Test pairs | Random neg. | Same-type neg. | Hard neg. (type + degree) |
 |---|---|---|---|---|
-| protein-disease | 12,673 | 0.687 ± 0.005 | 0.967 ± 0.001 | **0.517 ± 0.003** |
-| protein-GO term | 20,249 | 0.700 ± 0.010 | 0.905 ± 0.005 | **0.591 ± 0.011** |
-| ligand-protein | 1,720 | 0.585 ± 0.006 | 0.675 ± 0.005 | **0.678 ± 0.007** |
-| protein-protein | 14,858 | 0.712 ± 0.008 | 0.724 ± 0.017 | **0.710 ± 0.019** |
+| protein-disease | 24,814 | 0.940 ± 0.005 | 0.975 ± 0.001 | **0.525 ± 0.000** |
+| protein-GO term | 25,871 | 0.919 ± 0.005 | 0.904 ± 0.002 | **0.590 ± 0.003** |
+| ligand-protein | 46,322 | 0.457 ± 0.018 | 0.620 ± 0.019 | **0.626 ± 0.011** |
+| protein-protein | 106,047 | 0.769 ± 0.017 | 0.795 ± 0.011 | **0.686 ± 0.037** |
 
-Trust the hard-negative column. Protein-disease drops from 0.967 to 0.517 once negatives match in degree, so the model mostly learns node popularity. Protein-protein is the most stable target. These numbers use our own GNN; the organizers' protocol is still unconfirmed.
+Trust the hard-negative column. Protein-disease drops from 0.975 to 0.525 once negatives match in degree, so the model mostly learns node popularity; protein-GO behaves the same way. Protein-protein is the most informative target (0.686 under hard negatives, many test pairs), though its seed spread is larger. The ligand-protein random-negative score is below 0.5, which we have not yet explained. These numbers use our own GNN; the organizers' protocol is still unconfirmed. An earlier run on a truncated graph (10 items per list) gave different numbers and should be ignored.
 
 ### Leakage rules (from the literature survey, `documents/muse-1.md`)
 
