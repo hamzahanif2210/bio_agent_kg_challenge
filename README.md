@@ -2,14 +2,60 @@
 
 An AI agent that autonomously builds an enriched, ontology-aligned knowledge graph (KG) from public Pharos data, optimized for link prediction.
 
-> **Challenge:** Given experimentally measured relationships, can an agent build a contextualized KG that outperforms existing public KGs (e.g. Pharos) at predicting held-out links with GNNs/GCNs?
+## The challenge
 
-**Topic:** Structured Data Integration & Link Prediction
-**Timeline:** kickoff Oct 6, 2026 · progress report Oct 27 · challenge ends Nov 17 · results Dec 15
+Knowledge graphs are powerful for biology but hard for most researchers to build and use. The organizers (Bio-Agent KG Construction Challenge, topic *Structured Data Integration & Link Prediction*) ask teams to build **AI agents that construct, maintain and query KGs autonomously**.
 
-## Status
+**Key question:** given a set of experimentally measured relationships, can an agent build a contextualized KG that **outperforms existing public KGs (e.g. Pharos) at predicting held-out links** with GNNs/GCNs?
 
-Early stage. The schema, leakage-safe split, baseline evaluator, provenance explainer and the ingest harness (with a Pharos tool) exist; the prune agent and more source tools are still to do. The harness has been tested with a scripted model (`tests/test_harness.py`) but not yet run against the real Claude API.
+### What we must deliver
+
+An agent (or swarm of agents) that takes public datasets from [Pharos](https://pharos.nih.gov/about) and builds an enriched graph, pulling in disease, drug, gene, protein and ontology context from other public KGs and databases. The agent should run this loop:
+
+1. **Ingest:** combine heterogeneous sources into one graph.
+2. **Filter:** turn a plain-language research question into a graph query and return only the relevant subgraph.
+3. **Clean:** prune erroneous or contextually wrong links (hallucinations), e.g. by re-weighting edge confidence with literature or a GNN.
+4. **Limit:** keep the queryable graph a manageable size (the organizers call this probably unnecessary).
+5. **Maintain:** update automatically as new literature or data appears (the organizers hope this is "not too complicated").
+
+### How it is judged
+
+The agent builds the graph; GNN/GCN/embedding models are then run to predict held-out edges, and performance is compared with the same ML on the existing Pharos graph.
+
+| Criterion | Weight | What it asks |
+|---|---|---|
+| Usability | 40% | Can a non-KG expert use the agent? Does it make the value of KGs obvious, including multi-hop questions? |
+| Accuracy and pruning | 30% | How well does it remove erroneous or irrelevant data? |
+| Explainability | 20% | Can it trace the lineage of any edge (why does A connect to B)? |
+| Adherence to standards | 10% | Nodes and edges map to real ontology classes and properties (Biolink, OBO URIs); few, specific classes. |
+
+### Key dates
+
+- Kickoff Oct 6, 2026 (done)
+- **Progress report by email: Oct 27, 2026**
+- **Challenge ends: Nov 17, 2026**
+- Judging Nov 17 to Dec 8; results Dec 15
+- Prize (open-source track): USD 5,000 AWS credits
+
+## Our progress (as of 2026-10-26)
+
+| Area | Status |
+|---|---|
+| Shared graph format (nodes/edges Parquet with provenance columns) | Done (`schema/kg.py`) |
+| Full Pharos graph from the live API | Done: 397,636 nodes, 3,091,048 edges |
+| Leakage-safe evaluation (unordered-pair split, hard negatives, enrichment leak check) | Done (`eval/`) |
+| Baseline to beat (GraphSAGE on Pharos, 3 seeds, 4 edge types) | Done, see table below |
+| Ingest agent harness with a Pharos tool (cache, logs, caps, validation, leak guard) | Done; tested with a scripted model (`tests/test_harness.py`) |
+| Ingest agent run against the real Claude API | **Not yet** (needs `ANTHROPIC_API_KEY`) |
+| Additional source tools (UniProt, Open Targets, GO/MONDO, OptimusKG, Monarch) | **Not started** |
+| Clean / prune agent | **Not started** (placeholder) |
+| Filter (natural language to subgraph query) | **Not started** |
+| Maintain (auto-update) | **Not started** |
+| Edge explanation (`provenance/explain.py`) | Basic lookup only |
+| Enriched graph beating the baseline | **Not yet** (no enrichment source added) |
+| Answers from the organizers (split, metric, GNN, submission format) | **Not yet asked** |
+
+**Next steps:** (1) run the ingest agent for real on a small task; (2) add a first enrichment source and test it with the leak check; (3) measure whether the enriched graph beats the baseline on the hard-negative metric; (4) build the Clean step; (5) send the open questions below to the organizers.
 
 ## Approach
 
@@ -38,7 +84,9 @@ src/bioagent/
   provenance/explain.py "Why does A connect to B?" lineage lookup
   eval/split.py         Fixed held-out edge split + leak guard
   eval/baseline.py      GraphSAGE link-prediction evaluator
-scripts/download_pharos.sh   Data download (TODO, pending organizer-confirmed files)
+scripts/*.sbatch             Slurm jobs: fetch_pharos_full (graph), baseline_array (evaluation)
+scripts/summarize_runs.py    Baseline results table (mean +/- std over seeds)
+tests/test_harness.py        Harness tests (no API key needed)
 data/{raw,processed}/        Local data (git-ignored)
 runs/                        Experiment outputs (git-ignored)
 env.sh                       Activates the environment and sets PYTHONPATH
