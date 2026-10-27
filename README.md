@@ -73,6 +73,27 @@ The agent follows the challenge loop:
 
 Every edge carries provenance (source, evidence, confidence, method, timestamp), so any link can be traced back with `provenance/explain.py`.
 
+### Running the ingest agent with an LLM
+
+Keys live in environment variables only (never in the repo).
+
+```bash
+# Alliance Vulcan (OpenAI-compatible; models with tool calling include gpt-oss-120b, qwen35-122b)
+export LLM_API_KEY=...        # key from the Alliance Aleph docs (docs.alliancecan.ca/wiki/aleph)
+python -m bioagent.ingest.run "Build a graph around EGFR and its interaction partners" --out data/processed/agent_kg \
+    --provider openai --base-url https://inference.vulcan.alliancecan.ca/v1 --model gpt-oss-120b
+
+# NRP managed LLMs (OpenAI-compatible; token from https://nrp.ai/llmtoken)
+python -m bioagent.ingest.run "..." --out data/processed/agent_kg \
+    --provider openai --base-url https://ellm.nrp-nautilus.io/v1 --model qwen3
+
+# Claude API
+export ANTHROPIC_API_KEY=...
+python -m bioagent.ingest.run "..." --out data/processed/agent_kg
+```
+
+Cold models can answer `503 model_scaled_to_zero` on the first request; the client retries automatically.
+
 ## Repository layout
 
 ```

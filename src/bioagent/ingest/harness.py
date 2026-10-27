@@ -106,6 +106,67 @@ def anthropic_llm(client=None):
     return call
 
 
+def _http_post(url, headers, body, tries=6):
+    """POST JSON, retrying on 429/503 (e.g. a cold model: 503 model_scaled_to_zero + Retry-After)."""
+    import requests
+    for i in range(tries):
+        r = requests.post(url, headers=headers, json=body, timeout=300)
+        if r.status_code in (429, 503) and i < tries - 1:
+            time.sleep(min(float(r.headers.get("Retry-After", 2 ** (i + 1))), 60))
+            continue
+        r.raise_for_status()
+        return r.json()
+
+
+def openai_llm(base_url, api_key, post=None):
+    """LLM callable for any OpenAI-compatible chat API with tool calling (Vulcan, NRP, vLLM, ...).
+    Translates our Anthropic-style messages and tool blocks to and from the OpenAI format."""
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    post = post or (lambda body: _http_post(url, headers, body))
+
+    def call(model, system, messages, tools, max_tokens):
+        msgs = [{"role": "system", "content": system}] if system else []
+        for m in messages:
+            c = m["content"]
+            if isinstance(c, str):
+                msgs.append({"role": m["role"], "content": c})
+            elif m["role"] == "assistant":
+                text = " ".join(b["text"] for b in c if b["type"] == "text")
+                calls = [{"id": b["id"], "type": "function",
+                          "function": {"name": b["name"], "arguments": json.dumps(b["input"])}}
+                         for b in c if b["type"] == "tool_use"]
+                msg = {"role": "assistant", "content": text or None}
+                if calls:
+                    msg["tool_calls"] = calls
+                msgs.append(msg)
+            else:
+                for b in c:
+                    if b["type"] == "tool_result":
+                        msgs.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": str(b["content"])})
+                    elif b["type"] == "text":
+                        msgs.append({"role": "user", "content": b["text"]})
+        body = {"model": model, "messages": msgs, "max_tokens": max_tokens,
+                "tools": [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                            "parameters": t["input_schema"]}} for t in tools]}
+        r = post(body)
+        msg = r["choices"][0]["message"]
+        content = []
+        if msg.get("content"):
+            content.append({"type": "text", "text": msg["content"]})
+        for tc in msg.get("tool_calls") or []:
+            try:
+                args = json.loads(tc["function"]["arguments"] or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            content.append({"type": "tool_use", "id": tc["id"], "name": tc["function"]["name"], "input": args})
+        u = r.get("usage") or {}
+        return {"content": content,
+                "stop_reason": "tool_use" if msg.get("tool_calls") else "end_turn",
+                "usage": {"input_tokens": u.get("prompt_tokens", 0), "output_tokens": u.get("completion_tokens", 0)}}
+    return call
+
+
 def _clean(blocks):
     """Keep only the fields the API accepts back in assistant messages."""
     out = []

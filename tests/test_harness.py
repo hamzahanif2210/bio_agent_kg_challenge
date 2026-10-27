@@ -84,3 +84,25 @@ with tempfile.TemporaryDirectory() as d:
     assert len(calls) == 1, calls
 print("cache ok")
 print("ALL PASSED")
+
+# 6. OpenAI-compatible adapter: translation both ways, using a fake endpoint (no network)
+import json as _json
+from bioagent.ingest.harness import openai_llm
+seen = []
+def fake_post(body):
+    seen.append(body)
+    if len(seen) == 1:   # model asks for a tool
+        return {"choices": [{"message": {"content": None, "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "pharos_get_target", "arguments": '{"target": "AAA"}'}}]}}],
+                "usage": {"prompt_tokens": 7, "completion_tokens": 3}}
+    return {"choices": [{"message": {"content": "done", "tool_calls": None}}], "usage": {"prompt_tokens": 9, "completion_tokens": 1}}
+s = KGStore()
+with tempfile.TemporaryDirectory() as d:
+    r = run_agent("task", tools.TOOLS, s, openai_llm("http://x/v1", "k", post=fake_post), cache_dir=d, system="sys")
+assert r["stop"] == "done" and r["final_text"] == "done" and s.summary()["edges"] == 4, r
+b0, b1 = seen
+assert b0["messages"][0] == {"role": "system", "content": "sys"} and b0["tools"][0]["type"] == "function"
+assert b1["messages"][-2]["tool_calls"][0]["function"]["name"] == "pharos_get_target"        # assistant turn replayed
+assert b1["messages"][-1]["role"] == "tool" and b1["messages"][-1]["tool_call_id"] == "c1"  # tool result returned
+print("openai adapter ok")
+print("ALL PASSED")
