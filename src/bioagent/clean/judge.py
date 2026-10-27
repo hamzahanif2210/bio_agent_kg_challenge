@@ -20,7 +20,7 @@ SYSTEM = (
     "with a disease, using ONLY the evidence provided in the message. Do not rely on memory. "
     "A literature co-mention count by itself is weak evidence unless the titles show a real link. "
     "If the evidence does not decide, answer \"uncertain\". Reply with one JSON object only: "
-    '{"verdict": "keep" | "prune" | "uncertain", "confidence": number 0-1 that the association is real, '
+    '{"verdict": "keep" | "prune" | "uncertain", "confidence": your confidence in that verdict, 0-1, '
     '"evidence_used": [list of: "pubmed_count", "pubmed_titles", "protein_function", "disease_definition"], '
     '"reason": "one sentence"}'
 )
@@ -86,10 +86,13 @@ def parse_verdict(text):
         if v not in ("keep", "prune", "uncertain"):
             raise ValueError
         c = float(d.get("confidence", 0.5))
-        return {"verdict": v, "confidence": min(max(c, 0.0), 1.0), "evidence_used": d.get("evidence_used", []),
+        c = min(max(c, 0.0), 1.0)
+        # models differ on whether "confidence" is in the verdict or in the association; p_real is unambiguous
+        p_real = 0.5 if v == "uncertain" else (c if v == "keep" else 1.0 - c)
+        return {"verdict": v, "confidence": c, "p_real": round(p_real, 3), "evidence_used": d.get("evidence_used", []),
                 "reason": str(d.get("reason", ""))[:300]}
     except Exception:
-        return {"verdict": "uncertain", "confidence": 0.5, "evidence_used": [], "reason": "unparseable model reply: " + text[:120]}
+        return {"verdict": "uncertain", "confidence": 0.5, "p_real": 0.5, "evidence_used": [], "reason": "unparseable model reply: " + text[:120]}
 
 
 def judge(llm, model, gene, protein_function, disease, definition, pubmed, max_tokens=1500, max_budget=6000):

@@ -12,6 +12,8 @@ assert parse_verdict('Sure: {"verdict": "keep", "confidence": 0.9, "evidence_use
 assert parse_verdict("no json here")["verdict"] == "uncertain"
 assert parse_verdict('{"verdict": "maybe"}')["verdict"] == "uncertain"
 assert parse_verdict('{"verdict": "prune", "confidence": 7}')["confidence"] == 1.0
+assert parse_verdict('{"verdict": "prune", "confidence": 0.9}')["p_real"] == 0.1 and parse_verdict('{"verdict": "keep", "confidence": 0.9}')["p_real"] == 0.9
+assert parse_verdict('{"verdict": "uncertain", "confidence": 0.9}')["p_real"] == 0.5
 
 seen = []
 def fake(model, system, messages, tools, max_tokens):

@@ -60,7 +60,7 @@ ok = sil[sil.verdict.isin(["keep", "prune"])]
 print(f"\nsilver set: {len(sil)} edges ({sil.y.sum()} likely-true, {len(sil)-sil.y.sum()} random pairs)")
 print(f"  decided (not uncertain/error): {len(ok)}; accuracy when decided: {((ok.verdict == 'keep') == ok.y.astype(bool)).mean():.3f}")
 print(f"  accuracy counting uncertain as wrong: {((sil.verdict == 'keep') == sil.y.astype(bool)).mean():.3f}")
-print(f"  AUROC of judge confidence: {roc_auc_score(sil.y, sil.confidence):.3f} | AUROC of log(PubMed count) alone: {roc_auc_score(sil.y, np.log1p(sil.pubmed_count)):.3f}")
+print(f"  AUROC of judge p_real: {roc_auc_score(sil.y, sil.p_real):.3f} | AUROC of log(PubMed count) alone: {roc_auc_score(sil.y, np.log1p(sil.pubmed_count)):.3f}")
 w = df[df.group == "weak_pruned_by_rules"]
 print(f"\nweak edges the rules prune (n={len(w)}): judge keep {np.mean(w.verdict=='keep'):.2f}, prune {np.mean(w.verdict=='prune'):.2f}, "
       f"uncertain/error {np.mean(~w.verdict.isin(['keep','prune'])):.2f}; mean PubMed co-mentions {w.pubmed_count.mean():.0f}, zero-mention share {np.mean(w.pubmed_count==0):.2f}")
