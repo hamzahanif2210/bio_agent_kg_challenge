@@ -146,9 +146,10 @@ def openai_llm(base_url, api_key, post=None):
                         msgs.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": str(b["content"])})
                     elif b["type"] == "text":
                         msgs.append({"role": "user", "content": b["text"]})
-        body = {"model": model, "messages": msgs, "max_tokens": max_tokens,
-                "tools": [{"type": "function", "function": {"name": t["name"], "description": t["description"],
-                                                            "parameters": t["input_schema"]}} for t in tools]}
+        body = {"model": model, "messages": msgs, "max_tokens": max_tokens}
+        if tools:
+            body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                               "parameters": t["input_schema"]}} for t in tools]
         r = post(body)
         msg = r["choices"][0]["message"]
         content = []
