@@ -3,11 +3,16 @@
 #   bash scripts/download_sources.sh [SOURCE|all] [DEST]     DEST default /scratch/hamza95/bio_kg_data
 # SOURCE: go mondo uniprot monarch opentargets optimuskg all.  Versions: Open Targets 26.09, Monarch "latest".
 # Run through Slurm (scripts/download_sources.sbatch), never on the login node.
+# NOTE: compute nodes cannot reach ftp.ebi.ac.uk (Open Targets); that source needs a different route.
 set -u
 SRC=${1:-all}
 DEST=${2:-/scratch/hamza95/bio_kg_data}
 OT=https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.09/output
-dl(){ mkdir -p "$1"; curl -fL --retry 5 --retry-delay 5 -C - -o "$1/$2" "$3" || echo "FAILED: $3"; }
+dl(){  # skip files already complete (a resume on a finished file returns HTTP 416, not an error)
+  mkdir -p "$1"
+  remote=$(curl -sIL -m 30 "$3" | grep -i '^content-length' | tail -1 | tr -dc 0-9)
+  if [ -n "$remote" ] && [ -f "$1/$2" ] && [ "$(stat -c %s "$1/$2")" = "$remote" ]; then echo "ok (complete): $2"; return; fi
+  curl -fL --retry 5 --retry-delay 5 -C - -o "$1/$2" "$3" || echo "FAILED: $3"; }
 
 do_go(){ dl $DEST/go go-basic.obo http://purl.obolibrary.org/obo/go/go-basic.obo; }
 do_mondo(){ dl $DEST/mondo mondo.obo http://purl.obolibrary.org/obo/mondo.obo
