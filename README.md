@@ -37,6 +37,8 @@ The agent builds the graph; GNN/GCN/embedding models are then run to predict hel
 - Judging Nov 17 to Dec 8; results Dec 15
 - Prize (open-source track): USD 5,000 AWS credits
 
+**New to the project? Start with [docs/what_we_need_to_do.md](docs/what_we_need_to_do.md)**, a plain-language guide to the goal, the scoring, the work packages and the calendar.
+
 ## Our progress (as of 2026-10-26)
 
 | Area | Status |
