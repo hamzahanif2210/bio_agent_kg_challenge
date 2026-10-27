@@ -2,13 +2,15 @@
 
 nodes: id (CURIE), category (Biolink class), name, source
 edges: subject, predicate (Biolink), object, source, evidence, confidence,
-       timestamp, method  -- provenance columns are mandatory (explainability).
+       timestamp, method, attributes  -- provenance columns are mandatory (explainability).
+`confidence` is the source-reported score in [0,1], or NaN when the source gives none.
+`attributes` is a JSON string of extra per-edge evidence (e.g. PPI p_int, disease association types).
 """
 import pandas as pd
 
 NODE_COLS = ["id", "category", "name", "source"]
 EDGE_COLS = ["subject", "predicate", "object", "source", "evidence",
-             "confidence", "timestamp", "method"]
+             "confidence", "timestamp", "method", "attributes"]
 
 
 def _check(df, cols, what):

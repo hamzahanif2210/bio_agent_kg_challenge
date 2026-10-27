@@ -17,22 +17,44 @@ import requests
 from bioagent.schema.kg import write_kg
 
 URL = "https://pharos-api.ncats.io/graphql"
-CACHE = Path(__file__).resolve().parents[3] / "data" / "raw" / "pharos_full"  # pharos/ holds the old truncated pages
+# pharos/ = old truncated pages, pharos_full/ = full lists without evidence; pharos_evidence/ = full lists + evidence
+CACHE = Path(__file__).resolve().parents[3] / "data" / "raw" / "pharos_evidence"
 PAGE = 20
-# Pharos returns only 10 items per nested list (20 for GO) unless `top` is given; queries below use top:5000.
+# Pharos returns only 10 items per nested list (20 for GO) unless `top` is given; we use top:5000.
+# Per-edge evidence: PPI props (Score, p_int) and, per disease, the supporting association
+# records (source database `type` and `score`; capped at 100 per disease).
+FIELDS = """
+  uniprot sym name tdl
+  diseases(top:5000){ name mondoID associations(top:100){ type score } }
+  ligands(top:5000){ ligid name isdrug }
+  ppis(top:5000){ type props{ name value } target{ uniprot } }
+  go(top:5000){ goid term type }"""
 
 # skip/top live on the *inner* targets field; the outer ones are ignored.
-QUERY = """
-query($skip:Int,$top:Int){ targets{ targets(skip:$skip, top:$top){
-  uniprot sym name tdl
-  diseases(top:5000){ name mondoID }
-  ligands(top:5000){ ligid name isdrug }
-  ppis(top:5000){ type target{ uniprot } }
-  go(top:5000){ goid term type }
-} } }"""
+QUERY = "query($skip:Int,$top:Int){ targets{ targets(skip:$skip, top:$top){" + FIELDS + "\n} } }"
 
 GO_TYPE = {"F": "biolink:MolecularActivity", "P": "biolink:BiologicalProcess",
            "C": "biolink:CellularComponent"}
+
+
+def _float(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def slim(t):
+    """Reduce evidence-heavy fields to what we keep, before caching."""
+    for d in t.get("diseases") or []:
+        assoc = d.pop("associations", None) or []
+        scores = [a["score"] for a in assoc if a.get("score") is not None]
+        d["assoc"] = {"n": len(assoc), "types": sorted({a["type"] for a in assoc if a.get("type")}),
+                      "max_score": max(scores) if scores else None}
+    for p in t.get("ppis") or []:
+        props = {x["name"]: x["value"] for x in (p.pop("props", None) or [])}
+        p["score"], p["p_int"] = _float(props.get("Score")), _float(props.get("p_int"))
+    return t
 
 
 def _post(skip, top, retries=4):
@@ -43,7 +65,7 @@ def _post(skip, top, retries=4):
             body = r.json()
             if "errors" in body:
                 raise RuntimeError(body["errors"][0]["message"])
-            return body["data"]["targets"]["targets"]
+            return [slim(t) for t in body["data"]["targets"]["targets"]]
         except Exception:
             if i == retries - 1:
                 raise
@@ -70,14 +92,7 @@ def fetch(limit=None):
     return out
 
 
-TARGET_QUERY = """
-query($q:ITarget){ target(q:$q){
-  uniprot sym name tdl
-  diseases(top:5000){ name mondoID }
-  ligands(top:5000){ ligid name isdrug }
-  ppis(top:5000){ type target{ uniprot } }
-  go(top:5000){ goid term type }
-} }"""
+TARGET_QUERY = "query($q:ITarget){ target(q:$q){" + FIELDS + "\n} }"
 TARGET_CACHE = CACHE.parent / "pharos_targets"
 _UNIPROT = re.compile(r"^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})$")
 
@@ -99,6 +114,7 @@ def fetch_target(identifier, retries=3):
             if "errors" in body:
                 raise RuntimeError(body["errors"][0]["message"])
             t = body["data"]["target"]
+            t = slim(t) if t else t
             f.write_text(json.dumps(t))
             return t
         except Exception:
@@ -114,9 +130,12 @@ def to_kg(targets):
     def node(i, cat, name):
         nodes.setdefault(i, {"id": i, "category": cat, "name": name, "source": "pharos"})
 
-    def edge(s, p, o, ev):
+    def edge(s, p, o, ev, conf=None, attrs=None):
+        # confidence = the source-reported score where Pharos gives one, else NaN (unknown)
         edges.append({"subject": s, "predicate": p, "object": o, "source": "pharos",
-                      "evidence": ev, "confidence": 1.0, "timestamp": ts, "method": "pharos_graphql"})
+                      "evidence": ev, "confidence": float("nan") if conf is None else conf,
+                      "timestamp": ts, "method": "pharos_graphql",
+                      "attributes": json.dumps(attrs or {}, sort_keys=True)})
 
     for t in targets:
         if not t.get("uniprot"):
@@ -126,7 +145,9 @@ def to_kg(targets):
         for d in t.get("diseases") or []:
             if d.get("mondoID"):
                 node(d["mondoID"], "biolink:Disease", d["name"])
-                edge(tid, "biolink:related_to", d["mondoID"], "pharos:disease_association")
+                a = d.get("assoc") or {}
+                edge(tid, "biolink:related_to", d["mondoID"], "pharos:disease_association",
+                     a.get("max_score"), {"n_assoc": a.get("n"), "assoc_types": a.get("types")})
         for l in t.get("ligands") or []:
             lid = f"PHAROS.LIGAND:{l['ligid']}"
             node(lid, "biolink:Drug" if l.get("isdrug") else "biolink:SmallMolecule", l["name"])
@@ -136,7 +157,8 @@ def to_kg(targets):
             if o:
                 oid = f"UniProtKB:{o}"
                 node(oid, "biolink:Protein", o)
-                edge(tid, "biolink:interacts_with", oid, f"pharos:ppi:{p.get('type')}")
+                edge(tid, "biolink:interacts_with", oid, f"pharos:ppi:{p.get('type')}",
+                     p.get("score"), {"p_int": p.get("p_int")})
         for g in t.get("go") or []:
             node(g["goid"], GO_TYPE.get(g.get("type"), "biolink:BiologicalProcess"), g["term"])
             edge(tid, "biolink:related_to", g["goid"], "pharos:go")

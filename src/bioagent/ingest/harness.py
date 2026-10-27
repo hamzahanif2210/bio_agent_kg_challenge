@@ -77,7 +77,10 @@ class KGStore:
         if not str(r["predicate"]).startswith("biolink:"):
             return False
         c = r.get("confidence")
-        return c is not None and 0.0 <= float(c) <= 1.0
+        if c is None:
+            return False
+        c = float(c)
+        return c != c or 0.0 <= c <= 1.0  # NaN = source reports no score
 
     def frames(self):
         edges = pd.DataFrame(self.edges.values(), columns=EDGE_COLS)

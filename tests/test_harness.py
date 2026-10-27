@@ -42,8 +42,8 @@ r = go(s, [tool_use("pharos_get_target", {"target": "AAA"}, 1),
            tool_use("nope", {}, 3), DONE])
 assert r["stop"] == "done" and r["final_text"] == "ok", r
 n, e = s.frames()
-assert len(e) == 4 and e.confidence.between(0, 1).all() and e.source.eq("pharos").all(), e
-assert set(e.columns) >= {"evidence", "method", "timestamp"}
+assert len(e) == 4 and (e.confidence.isna() | e.confidence.between(0, 1)).all() and e.source.eq("pharos").all(), e
+assert set(e.columns) >= {"evidence", "method", "timestamp", "attributes"}
 print("happy path ok:", r["kg"])
 
 # 2. leak guard: block the PPI pair; it must not enter the store
