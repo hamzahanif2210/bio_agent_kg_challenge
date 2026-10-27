@@ -94,6 +94,24 @@ python -m bioagent.ingest.run "..." --out data/processed/agent_kg
 
 Cold models can answer `503 model_scaled_to_zero` on the first request; the client retries automatically.
 
+### LLM choice (measured 2026-10-27, NRP)
+
+Three small tool-use tasks per model (`scripts/model_bakeoff.py`, results in `runs/bakeoff_nrp.json`): fetch two genes, fetch three genes, and recover from an unknown gene.
+
+| Model | Passed | Avg seconds/task | Avg tokens/task |
+|---|---|---|---|
+| kimi | 3/3 | 16 | 1,615 |
+| glm-5 | 3/3 | 17 | 2,271 |
+| deepseek-v4-flash | 3/3 | 14 | 2,825 |
+| minimax | 3/3 | 13 | 3,108 |
+| gpt-oss | 3/3 | 8 | 2,652 |
+| service (alias) | 3/3 | 13 | 2,805 |
+| qwen3 | 3/3 | 281 | 3,102 |
+| qwen3-small | 2/3 (one HTTP 500) | 5 | 2,698 |
+| gemma | 0/3 (read timeouts) | 300 | n/a |
+
+Default: **kimi** (fewest tokens), with **gpt-oss** when speed matters and **glm-5** as a backup. These tasks do not separate the top models, so a harder test is still needed. Run the agent on NRP with `sbatch scripts/run_agent_nrp.sbatch "TASK" OUT_PREFIX [MODEL]` (reads the token from a file inside the job).
+
 ## Repository layout
 
 ```

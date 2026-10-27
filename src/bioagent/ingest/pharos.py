@@ -37,6 +37,9 @@ GO_TYPE = {"F": "biolink:MolecularActivity", "P": "biolink:BiologicalProcess",
            "C": "biolink:CellularComponent"}
 
 
+SCHEMA_VERSION = 2  # bump when the cached record format changes; older cached targets are refetched
+
+
 def _float(x):
     try:
         return float(x)
@@ -54,6 +57,7 @@ def slim(t):
     for p in t.get("ppis") or []:
         props = {x["name"]: x["value"] for x in (p.pop("props", None) or [])}
         p["score"], p["p_int"] = _float(props.get("Score")), _float(props.get("p_int"))
+    t["_schema"] = SCHEMA_VERSION
     return t
 
 
@@ -105,7 +109,9 @@ def fetch_target(identifier, retries=3):
     TARGET_CACHE.mkdir(parents=True, exist_ok=True)
     f = TARGET_CACHE / (re.sub(r"[^A-Za-z0-9_.-]", "_", ident.upper()) + ".json")
     if f.exists():
-        return json.loads(f.read_text())
+        cached = json.loads(f.read_text())
+        if cached is None or cached.get("_schema") == SCHEMA_VERSION:
+            return cached   # stale (older-format) records fall through and are refetched
     for i in range(retries):
         try:
             r = requests.post(URL, json={"query": TARGET_QUERY, "variables": {"q": q}}, timeout=60)
