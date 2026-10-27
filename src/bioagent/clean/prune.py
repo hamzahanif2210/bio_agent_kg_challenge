@@ -112,7 +112,7 @@ def _prune_disease(edges, mask, res):
             c = MULTI_DB_CONF.get(n, 0.9)
             out.append(("keep", c, f"supported by {n} independent databases ({', '.join(types[:4])})", "disease_multi_db", False))
         elif conf == conf and conf >= SCORE_OK:
-            out.append(("keep", round(float(conf), 3), f"single database ({types[0] if types else 'unknown'}) with score {conf:.2f}", "disease_scored", False))
+            out.append(("keep", round(max(float(conf), KEEP_THRESHOLD), 3), f"single database ({types[0] if types else 'unknown'}) with score {conf:.2f}", "disease_scored", False))
         elif n == 1 and types[0] in CURATED_DISEASE_DBS:
             out.append(("keep", 0.5, f"single curated database ({types[0]}); no independent confirmation", "disease_single_curated", True))
         else:

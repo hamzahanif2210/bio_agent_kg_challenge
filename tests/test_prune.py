@@ -24,7 +24,7 @@ rows = {
  "dis_obs":     E("UniProtKB:P1", "MONDO:OLD", "pharos:disease_association", attrs={"assoc_types": ["CTD", "Monarch"]}),
  "dis_ot":      E("UniProtKB:P1", "MONDO:OT", "pharos:disease_association", attrs={"assoc_types": ["Expression Atlas"]}),
  "dis_multi":   E("UniProtKB:P1", "MONDO:A", "pharos:disease_association", attrs={"assoc_types": ["CTD", "Monarch", "DisGeNET"]}),
- "dis_scored":  E("UniProtKB:P1", "MONDO:B", "pharos:disease_association", 0.5, {"assoc_types": ["DisGeNET"]}),
+ "dis_scored":  E("UniProtKB:P1", "MONDO:B", "pharos:disease_association", 0.3, {"assoc_types": ["DisGeNET"]}),
  "dis_curated": E("UniProtKB:P1", "MONDO:C", "pharos:disease_association", attrs={"assoc_types": ["CTD"]}),
  "dis_weak":    E("UniProtKB:P1", "MONDO:D", "pharos:disease_association", attrs={"assoc_types": ["Expression Atlas"]}),
  "go_obs":      E("UniProtKB:P1", "GO:OLD", "pharos:go"),
@@ -47,6 +47,8 @@ for k, (verdict, rule) in exp.items():
     assert (v.verdict[k], v.rule[k]) == (verdict, rule), (k, v.loc[k].to_dict())
 assert v.verdict_confidence["ppi_rev_a"] == v.verdict_confidence["ppi_rev_b"] == 0.9   # pair-consistent
 assert v.verdict_confidence["ppi_multi"] > 0.7                                          # noisy-or combine
+from bioagent.clean.prune import KEEP_THRESHOLD
+assert ((v.verdict == "keep") == (v.verdict_confidence >= KEEP_THRESHOLD)).all(), v   # verdict must match the threshold
 assert v.verdict.notna().all() and v.reason.str.len().min() > 10 and len(v) == len(edges)
 print(v[["verdict", "verdict_confidence", "rule"]].to_string())
 print("ALL PASSED")
