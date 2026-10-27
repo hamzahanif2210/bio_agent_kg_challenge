@@ -6,7 +6,7 @@ message-passing graph. Test positives are scored against three negative
 contracts: random, type-matched, and degree+type-matched (hard).
 
 Usage:
-  python -m bioagent.eval.baseline PREFIX PREDICATE [EVIDENCE_PREFIX] [--epochs N] [--seed S]
+  python -m bioagent.eval.baseline PREFIX PREDICATE [EVIDENCE_PREFIX] [--epochs N] [--seed S] [--ref WHOLE_PREFIX]
 """
 import argparse
 import json
@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from sklearn.metrics import average_precision_score, roc_auc_score
 from torch_geometric.nn import SAGEConv
 
-from bioagent.eval.split import split_edges
+from bioagent.eval.split import pair_keys, split_edges
 from bioagent.schema.kg import read_kg
 
 
@@ -77,37 +77,61 @@ class Negatives:
         return u[ok], neg[ok]
 
 
-def run(prefix, predicate, evidence_prefix="", epochs=100, seed=0, dim=64):
+def run(prefix, predicate, evidence_prefix="", epochs=100, seed=0, dim=64, ref=None):
+    """Train on graph `prefix`; the hidden test edges and their negatives always come from
+    the reference graph `ref` (default: the same graph), so different graphs (e.g. whole vs
+    pruned) are scored on exactly the same questions."""
     torch.manual_seed(seed)
-    rng = np.random.default_rng(seed)
-    nodes, edges = read_kg(prefix)
+    ref = ref or prefix
+    nodes, edges_r = read_kg(ref)
     ix = {n: i for i, n in enumerate(nodes.id)}
     N = len(nodes)
-    edges = edges[edges.subject.isin(ix) & edges.object.isin(ix)].reset_index(drop=True)
-    target = (edges.predicate == predicate) & edges.evidence.str.startswith(evidence_prefix)
-    if target.sum() == 0:
-        raise ValueError("no edges match the target selector")
-    sp = split_edges(edges, target.to_numpy(), seed=seed)
 
+    def load(edges):
+        edges = edges[edges.subject.isin(ix) & edges.object.isin(ix)].reset_index(drop=True)
+        tgt = ((edges.predicate == predicate) & edges.evidence.str.startswith(evidence_prefix)).to_numpy()
+        return edges, tgt
+
+    edges_r, target_r = load(edges_r)
+    if not target_r.any():
+        raise ValueError("no edges match the target selector")
+    sp = split_edges(edges_r, target_r, seed=seed)
+    sr = edges_r.subject.map(ix).to_numpy()
+    orr = edges_r.object.map(ix).to_numpy()
+
+    # reference degrees and known pairs (fixed across graphs) -> identical test negatives
+    keep_r = np.ones(len(edges_r), bool)
+    keep_r[sp.blocked] = False
+    deg = np.bincount(np.r_[sr[keep_r], orr[keep_r]], minlength=N)
+    cat = nodes.category.astype("category").cat.codes.to_numpy()
+    known = np.minimum(sr, orr) * N + np.maximum(sr, orr)
+    neg_eval = Negatives(cat, deg, known, N, np.random.default_rng(seed + 1000))
+    neg_train = Negatives(cat, deg, known, N, np.random.default_rng(seed))
+    evals = {}
+    for name, idx in (("test", sp.test), ("val", sp.val)):
+        for mode in ("random", "typed", "degree"):
+            evals[(name, mode)] = neg_eval.sample(sr[idx], orr[idx], mode)
+
+    # the graph we actually train on
+    if prefix == ref:
+        edges, target = edges_r, target_r
+    else:
+        edges, target = load(read_kg(prefix)[1])
+    keys = pair_keys(edges)
+    keep = ~np.isin(keys, sp.heldout_keys)  # held-out pairs never reach training or message passing
     s = edges.subject.map(ix).to_numpy()
     o = edges.object.map(ix).to_numpy()
-    keep = np.ones(len(edges), bool)
-    keep[sp.blocked] = False  # held-out pairs never reach message passing
-    ms, mo = s[keep], o[keep]
-    ei = torch.from_numpy(np.stack([np.r_[ms, mo], np.r_[mo, ms]]))
-    deg = np.bincount(np.r_[ms, mo], minlength=N)
-    cat = nodes.category.astype("category").cat.codes.to_numpy()
-    known = np.minimum(s, o) * N + np.maximum(s, o)  # all edges incl. held-out
-    neg = Negatives(cat, deg, known, N, rng)
+    ei = torch.from_numpy(np.stack([np.r_[s[keep], o[keep]], np.r_[o[keep], s[keep]]]))
+    tr = np.flatnonzero(target & keep)
+    tr_u, tr_v = s[tr], o[tr]
 
-    tr_u, tr_v = s[sp.train], o[sp.train]
     model = Net(N, dim)
     opt = torch.optim.Adam(model.parameters(), 1e-2)
     for _ in range(epochs):
         model.train()
         opt.zero_grad()
         z = model(ei)
-        nu, nv = neg.sample(tr_u, tr_v, "typed")
+        nu, nv = neg_train.sample(tr_u, tr_v, "typed")
         pos = (z[tr_u] * z[tr_v]).sum(1)
         ng = (z[nu] * z[nv]).sum(1)
         logits = torch.cat([pos, ng])
@@ -116,20 +140,24 @@ def run(prefix, predicate, evidence_prefix="", epochs=100, seed=0, dim=64):
         opt.step()
 
     model.eval()
-    out = {"seed": seed, "n_test": int(len(sp.test)), "n_train": int(len(sp.train)),
-           "n_blocked": int(len(sp.blocked))}
+    in_graph = np.isin(pair_keys(edges_r.iloc[sp.test]), keys)  # test positives this graph still contains
+    out = {"seed": seed, "n_test": int(len(sp.test)), "n_train": int(len(tr)),
+           "n_blocked": int((~keep).sum()), "test_frac_in_graph": round(float(in_graph.mean()), 4)}
     with torch.no_grad():
         z = model(ei)
         for name, idx in (("test", sp.test), ("val", sp.val)):
-            pu, pv = s[idx], o[idx]
+            pu, pv = sr[idx], orr[idx]
             ps = (z[pu] * z[pv]).sum(1).numpy()
             for mode in ("random", "typed", "degree"):
-                nu, nv = neg.sample(pu, pv, mode)
+                nu, nv = evals[(name, mode)]
                 ns = (z[nu] * z[nv]).sum(1).numpy()
                 y = np.r_[np.ones(len(ps)), np.zeros(len(ns))]
                 sc = np.r_[ps, ns]
                 out[f"{name}_{mode}_auroc"] = round(float(roc_auc_score(y, sc)), 4)
                 out[f"{name}_{mode}_ap"] = round(float(average_precision_score(y, sc)), 4)
+                if name == "test" and mode == "degree" and 0 < in_graph.sum() < len(in_graph):
+                    y2 = np.r_[np.ones(int(in_graph.sum())), np.zeros(len(ns))]
+                    out["test_degree_auroc_in_graph_only"] = round(float(roc_auc_score(y2, np.r_[ps[in_graph], ns])), 4)
     return out
 
 
@@ -140,5 +168,6 @@ if __name__ == "__main__":
     ap.add_argument("evidence_prefix", nargs="?", default="")
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--ref", default=None, help="graph that defines the hidden test edges (default: same graph)")
     a = ap.parse_args()
-    print(json.dumps(run(a.prefix, a.predicate, a.evidence_prefix, a.epochs, a.seed), indent=1))
+    print(json.dumps(run(a.prefix, a.predicate, a.evidence_prefix, a.epochs, a.seed, ref=a.ref), indent=1))

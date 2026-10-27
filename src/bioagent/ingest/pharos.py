@@ -141,7 +141,9 @@ def to_kg(targets):
         if not t.get("uniprot"):
             continue
         tid = f"UniProtKB:{t['uniprot']}"
-        node(tid, "biolink:Protein", t.get("sym") or t.get("name"))
+        # a protein first seen as an interaction partner got its accession as a placeholder name;
+        # the target's own record has the real symbol, so it always wins
+        nodes[tid] = {"id": tid, "category": "biolink:Protein", "name": t.get("sym") or t.get("name"), "source": "pharos"}
         for d in t.get("diseases") or []:
             if d.get("mondoID"):
                 node(d["mondoID"], "biolink:Disease", d["name"])
