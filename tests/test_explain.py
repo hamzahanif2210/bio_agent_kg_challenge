@@ -25,6 +25,8 @@ g = (nodes, edges)
 assert resolve(nodes, "aaa") == "P:A" and resolve(nodes, "D:1") == "D:1"
 x = explain(None, "AAA", "Disease One", graph=g)
 assert len(x["direct_edges"]) == 1 and x["direct_edges"][0]["verdict"] == "keep"
+w = explain(None, "AAA", "CCC", graph=g)                                  # A-C and C-A rows are one fact
+assert len(w["direct_edges"]) == 1 and w["direct_edges"][0]["n_reported"] == 2 and abs(w["direct_edges"][0]["verdict_confidence"] - 0.8) < 1e-9
 assert x["n_shared_neighbours"] == 1 and x["paths"][0]["via"] == "P:C"   # A-C-D1, strength min(0.8, 0.9)
 assert abs(x["paths"][0]["strength"] - 0.8) < 1e-9
 y = explain(None, "AAA", "BBB", graph=g)                                  # no direct edge; via D:1 only

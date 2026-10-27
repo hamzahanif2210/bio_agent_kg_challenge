@@ -13,7 +13,7 @@ import sys
 import pandas as pd
 
 SHOW = ["subject", "predicate", "object", "source", "evidence", "confidence", "method", "timestamp",
-        "attributes", "verdict", "verdict_confidence", "reason", "rule", "needs_review"]
+        "attributes", "verdict", "verdict_confidence", "reason", "rule", "needs_review", "n_reported"]
 
 
 def load(prefix):
@@ -46,6 +46,12 @@ def explain(prefix, a, b, max_paths=5, graph=None):
     name = dict(zip(nodes.id, nodes.name))
     cat = dict(zip(nodes.id, nodes.category))
     direct = e[((e.subject == ida) & (e.object == idb)) | ((e.subject == idb) & (e.object == ida))]
+    # A-B and B-A rows with the same predicate/evidence/source are one fact reported twice: keep the best
+    sc = "verdict_confidence" if "verdict_confidence" in direct.columns else "confidence"
+    n_rows = direct.groupby(["predicate", "evidence", "source"]).size()
+    direct = (direct.sort_values(sc, ascending=False, na_position="last")
+                    .drop_duplicates(["predicate", "evidence", "source"]).copy())
+    direct["n_reported"] = [int(n_rows[(p, ev, so)]) for p, ev, so in zip(direct.predicate, direct.evidence, direct.source)]
 
     ea = e[(e.subject == ida) | (e.object == ida)]
     eb = e[(e.subject == idb) | (e.object == idb)]
@@ -85,6 +91,8 @@ def _edge_line(r, flip=False):
         parts.append(f"verdict {r['verdict'].upper()} at confidence {r['verdict_confidence']:.2f}: {r['reason']}")
     if r.get("needs_review"):
         parts.append("flagged for later review")
+    if r.get("n_reported", 1) > 1:
+        parts.append(f"reported {r['n_reported']} times (once per direction)")
     return "; ".join(parts)
 
 
