@@ -20,4 +20,31 @@ def fake(model, system, messages, tools, max_tokens):
             "usage": {"input_tokens": 100, "output_tokens": 20}}
 r = judge(fake, "m", "G", None, "D", None, {"count": 0, "titles": []})
 assert r["verdict"] == "prune" and r["tokens"] == 120 and seen[0][0] == []
+# a cut-off / empty reply is retried with a doubled budget
+budgets = []
+def flaky(model, system, messages, tools, max_tokens):
+    budgets.append(max_tokens)
+    if len(budgets) == 1:
+        return {"content": [], "stop_reason": "max_tokens", "usage": {"input_tokens": 50, "output_tokens": 300}}
+    return {"content": [{"type": "text", "text": '{"verdict": "keep", "confidence": 0.8, "reason": "ok"}'}],
+            "stop_reason": "end_turn", "usage": {"input_tokens": 50, "output_tokens": 40}}
+r = judge(flaky, "m", "G", None, "D", None, {"count": 1, "titles": []}, max_tokens=500)
+assert r["verdict"] == "keep" and budgets == [500, 1000] and r["tokens"] == 440, (r, budgets)
+
+# connection errors are retried by the HTTP helper
+import requests as rq
+from bioagent.ingest import harness
+n = {"c": 0}
+class Resp:
+    status_code = 200; headers = {}
+    def raise_for_status(self): pass
+    def json(self): return {"ok": True}
+def post(*a, **k):
+    n["c"] += 1
+    if n["c"] < 3: raise rq.ConnectionError("dropped")
+    return Resp()
+orig_post, orig_sleep = rq.post, harness.time.sleep
+rq.post, harness.time.sleep = post, lambda s: None
+assert harness._http_post("http://x", {}, {}) == {"ok": True} and n["c"] == 3
+rq.post, harness.time.sleep = orig_post, orig_sleep
 print("ALL PASSED")

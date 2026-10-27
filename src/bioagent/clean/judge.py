@@ -92,10 +92,18 @@ def parse_verdict(text):
         return {"verdict": "uncertain", "confidence": 0.5, "evidence_used": [], "reason": "unparseable model reply: " + text[:120]}
 
 
-def judge(llm, model, gene, protein_function, disease, definition, pubmed, max_tokens=300):
+def judge(llm, model, gene, protein_function, disease, definition, pubmed, max_tokens=1500, max_budget=6000):
+    """Reasoning models spend part of the budget thinking; if the reply is cut off or empty, retry with double."""
     prompt = build_prompt(gene, protein_function, disease, definition, pubmed)
-    r = llm(model, SYSTEM, [{"role": "user", "content": prompt}], [], max_tokens)
-    text = " ".join(b["text"] for b in r["content"] if b["type"] == "text")
-    out = parse_verdict(text)
-    out["tokens"] = (r.get("usage") or {}).get("input_tokens", 0) + (r.get("usage") or {}).get("output_tokens", 0)
-    return out
+    tokens, budget = 0, max_tokens
+    while True:
+        r = llm(model, SYSTEM, [{"role": "user", "content": prompt}], [], budget)
+        text = " ".join(b["text"] for b in r["content"] if b["type"] == "text")
+        u = r.get("usage") or {}
+        tokens += u.get("input_tokens", 0) + u.get("output_tokens", 0)
+        if (r.get("stop_reason") == "max_tokens" or not text.strip()) and budget * 2 <= max_budget:
+            budget *= 2
+            continue
+        out = parse_verdict(text)
+        out["tokens"], out["budget_used"] = tokens, budget
+        return out

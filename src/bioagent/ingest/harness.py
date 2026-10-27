@@ -110,8 +110,14 @@ def _http_post(url, headers, body, tries=6):
     """POST JSON, retrying on 429/503 (e.g. a cold model: 503 model_scaled_to_zero + Retry-After)."""
     import requests
     for i in range(tries):
-        r = requests.post(url, headers=headers, json=body, timeout=300)
-        if r.status_code in (429, 503) and i < tries - 1:
+        try:
+            r = requests.post(url, headers=headers, json=body, timeout=300)
+        except (requests.ConnectionError, requests.Timeout):   # dropped connection / slow model: back off and retry
+            if i == tries - 1:
+                raise
+            time.sleep(min(2 ** (i + 1), 30))
+            continue
+        if r.status_code in (429, 500, 502, 503, 504) and i < tries - 1:
             time.sleep(min(float(r.headers.get("Retry-After", 2 ** (i + 1))), 60))
             continue
         r.raise_for_status()
@@ -162,8 +168,9 @@ def openai_llm(base_url, api_key, post=None):
                 args = {}
             content.append({"type": "tool_use", "id": tc["id"], "name": tc["function"]["name"], "input": args})
         u = r.get("usage") or {}
+        finish = r["choices"][0].get("finish_reason")
         return {"content": content,
-                "stop_reason": "tool_use" if msg.get("tool_calls") else "end_turn",
+                "stop_reason": "tool_use" if msg.get("tool_calls") else ("max_tokens" if finish == "length" else "end_turn"),
                 "usage": {"input_tokens": u.get("prompt_tokens", 0), "output_tokens": u.get("completion_tokens", 0)}}
     return call
 
