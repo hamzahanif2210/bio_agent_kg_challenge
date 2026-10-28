@@ -6,6 +6,7 @@ database labels, and is told to answer "uncertain" when the evidence does not de
 """
 import hashlib
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -27,6 +28,9 @@ SYSTEM = (
 
 
 def _get(url, params, tries=4):
+    key = os.environ.get("NCBI_API_KEY")   # optional: raises NCBI's limit from 3 to 10 requests/s
+    if key:
+        params = {**params, "api_key": key}
     for i in range(tries):
         r = requests.get(url, params=params, timeout=30)
         if r.status_code == 429 and i < tries - 1:
@@ -36,13 +40,15 @@ def _get(url, params, tries=4):
         return r.json()
 
 
-def pubmed_cooccurrence(gene, disease, n_titles=3, pause=0.4):
+def pubmed_cooccurrence(gene, disease, n_titles=3, pause=None):
     """(count of PubMed title/abstract hits for gene AND disease, up to n_titles titles). Cached on disk."""
     term = f'"{gene}"[tiab] AND "{disease}"[tiab]'
     f = CACHE / (hashlib.sha1(term.encode()).hexdigest() + ".json")
     if f.exists():
         return json.loads(f.read_text())
     CACHE.mkdir(parents=True, exist_ok=True)
+    if pause is None:
+        pause = 0.12 if os.environ.get("NCBI_API_KEY") else 0.4
     time.sleep(pause)
     es = _get(f"{EUTILS}/esearch.fcgi", {"db": "pubmed", "term": term, "retmode": "json", "retmax": n_titles, "sort": "relevance"})["esearchresult"]
     count, ids = int(es.get("count", 0)), es.get("idlist", [])
