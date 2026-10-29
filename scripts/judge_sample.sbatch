@@ -9,4 +9,4 @@
 cd /project/rpp-nahee/hamza95/agent_challenge
 . ./env.sh
 export LLM_API_KEY=$(cat /project/rpp-nahee/hamza95/.nrp_token)
-python -u scripts/judge_sample.py --base-url https://ellm.nrp-nautilus.io/v1 --model "${1:-kimi}" --n-silver "${2:-40}" --n-weak "${3:-100}"
+python -u scripts/judge_sample.py --base-url https://ellm.nrp-nautilus.io/v1 --model "${1:-kimi}" --n-silver "${2:-40}" --n-weak "${3:-100}" --out "${4:-runs/judge_v2.json}"
