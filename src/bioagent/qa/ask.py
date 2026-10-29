@@ -1,0 +1,120 @@
+"""Question-to-graph: a plain-language question in, the relevant piece of the knowledge graph out.
+
+  python -m bioagent.qa.ask data/processed/pharos_pruned_v2 "How is EGFR connected to lung cancer?" \
+      --base-url https://ellm.nrp-nautilus.io/v1 --model gpt-oss        # key from env LLM_API_KEY
+  python -m bioagent.qa.ask data/processed/pharos_pruned_v2 --entities EGFR "lung cancer"   # no LLM needed
+
+Steps: (1) the LLM only picks out the names the question is about, as JSON; (2) the names are matched to graph
+nodes by plain lookup (never by the LLM); (3) the subgraph is cut out of the graph and every edge is shown with
+its source, evidence, verdict and reason. The LLM never supplies a fact: everything shown comes from the graph.
+Two entities -> how they connect (direct edges and two-step paths); one -> its best-supported neighbours.
+"""
+import argparse
+import json
+import os
+import re
+
+import pandas as pd
+
+from bioagent.provenance.explain import explain, format_explanation, load
+
+SYSTEM = ("You find the biomedical entities a question is about. Reply with JSON only: "
+          '{"entities": ["name or identifier as written, e.g. gene symbol, disease, drug, GO term", ...]}. '
+          "At most 3 entities, no commentary.")
+
+
+def extract_entities(llm, model, question, max_tokens=2000):
+    r = llm(model, SYSTEM, [{"role": "user", "content": question}], [], max_tokens)
+    text = " ".join(b["text"] for b in r["content"] if b["type"] == "text")
+    m = re.search(r"\{.*\}", text, re.S)
+    try:
+        ents = json.loads(m.group(0))["entities"] if m else []
+    except (ValueError, KeyError, TypeError):
+        ents = []
+    return [str(x).strip() for x in ents if str(x).strip()][:3]
+
+
+class Index:
+    """Name -> node lookup. Exact id or name first; then a whole-phrase match inside names, best-connected first."""
+
+    def __init__(self, nodes, edges):
+        self.nodes = nodes
+        self.by_name = nodes.assign(_l=nodes.name.astype(str).str.lower())
+        deg = pd.concat([edges.subject, edges.object]).value_counts()
+        self.by_name["_deg"] = self.by_name.id.map(deg).fillna(0)
+
+    def find(self, text, limit=5):
+        t = text.lower().strip()
+        n = self.by_name
+        hit = n[(n.id == text) | (n._l == t)]
+        kind = "exact"
+        if hit.empty:
+            hit = n[n._l.str.contains(r"\b" + re.escape(t) + r"\b", regex=True)]
+            kind = "partial"
+        hit = hit.sort_values("_deg", ascending=False).head(limit)
+        return kind, hit[["id", "name", "category", "_deg"]].to_dict("records")
+
+
+def neighbours(edges, nodes, node_id, top=15, kept_only=True):
+    e = edges[(edges.subject == node_id) | (edges.object == node_id)]
+    if kept_only and "verdict" in e.columns:
+        e = e[e.verdict == "keep"]
+    name, cat = dict(zip(nodes.id, nodes.name)), dict(zip(nodes.id, nodes.category))
+    e = e.assign(other=e.object.where(e.subject == node_id, e.subject))
+    sc = "verdict_confidence" if "verdict_confidence" in e.columns else "confidence"
+    e = e.sort_values(sc, ascending=False, na_position="last").drop_duplicates("other")
+    out = {}
+    for c, g in e.groupby(e.other.map(cat)):
+        out[c] = [{"id": r.other, "name": name.get(r.other), "evidence": r.evidence, "score": getattr(r, sc),
+                   "reason": getattr(r, "reason", None)} for r in g.head(top).itertuples()]
+    return out
+
+
+def answer(prefix, entities, graph=None):
+    """entities: list of names/ids. Returns (text, subgraph dict)."""
+    nodes, edges = graph if graph is not None else load(prefix)
+    idx = Index(nodes, edges)
+    found, notes = [], []
+    for ent in entities:
+        kind, hits = idx.find(ent)
+        if not hits:
+            notes.append(f"'{ent}': no matching node in the graph")
+            continue
+        if kind == "partial" or len(hits) > 1:
+            notes.append(f"'{ent}': matched {hits[0]['name']} [{hits[0]['id']}]"
+                         + (f" (other candidates: {', '.join(h['name'] for h in hits[1:4])})" if len(hits) > 1 else ""))
+        found.append(hits[0]["id"])
+    lines = list(notes)
+    if len(found) >= 2:
+        x = explain(prefix, found[0], found[1], graph=(nodes, edges))
+        lines += ["", format_explanation(x)]
+        sub = x
+    elif len(found) == 1:
+        nb = neighbours(edges, nodes, found[0])
+        nm = nodes.set_index("id").name.get(found[0])
+        lines += ["", f"Best-supported kept neighbours of {nm} [{found[0]}]:"]
+        for c, rows in nb.items():
+            lines.append(f"  {c.replace('biolink:', '')} ({len(rows)} shown)")
+            for r in rows[:8]:
+                s = "" if pd.isna(r["score"]) else f", score {r['score']:.2f}"
+                lines.append(f"    - {r['name']} [{r['id']}] ({r['evidence']}{s})")
+        sub = {"center": found[0], "neighbours": nb}
+    else:
+        lines.append("I could not find any entity from the question in the graph.")
+        sub = {}
+    return "\n".join(lines), sub
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("graph", help="whole-graph prefix, e.g. data/processed/pharos_pruned_v2.whole")
+    ap.add_argument("question", nargs="?")
+    ap.add_argument("--entities", nargs="+", help="skip the LLM and give the entities directly")
+    ap.add_argument("--base-url"); ap.add_argument("--model", default="gpt-oss")
+    a = ap.parse_args()
+    ents = a.entities
+    if not ents:
+        from bioagent.ingest.harness import openai_llm
+        ents = extract_entities(openai_llm(a.base_url, os.environ["LLM_API_KEY"]), a.model, a.question)
+        print("entities from the question:", ents)
+    print(answer(a.graph, ents)[0])
