@@ -29,7 +29,9 @@ def specialise(nodes, edges):
     ppi = ev.str.startswith("pharos:ppi:")
     physical = ppi & ev.str.contains("|".join(PHYSICAL_SOURCES))
     e.loc[physical, "predicate"] = "biolink:physically_interacts_with"
-    e.loc[ev == "pharos:disease_association", "predicate"] = "biolink:associated_with"
+    dis = ev == "pharos:disease_association"
+    e.loc[dis, "predicate"] = "biolink:associated_with"
+    e.loc[dis & (e.subject.map(cat) == "biolink:Gene"), "predicate"] = "biolink:gene_associated_with_condition"
     e.loc[ev == "pharos:ligand_activity", "predicate"] = "biolink:physically_interacts_with"
     go = ev == "pharos:go"
     e.loc[go, "predicate"] = e.object[go].map(cat).map(GO_PREDICATE).fillna("biolink:related_to")

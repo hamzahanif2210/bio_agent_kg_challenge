@@ -88,7 +88,7 @@ def answer(prefix, entities, graph=None):
     if len(found) >= 2:
         x = explain(prefix, found[0], found[1], graph=(nodes, edges))
         lines += ["", format_explanation(x)]
-        sub = x
+        sub = {**x, "edge_rows": list(x["direct_edges"]) + [r for p in x["paths"] for r in (p["first_edge"], p["second_edge"])]}
     elif len(found) == 1:
         nb = neighbours(edges, nodes, found[0])
         nm = nodes.set_index("id").name.get(found[0])
@@ -98,7 +98,11 @@ def answer(prefix, entities, graph=None):
             for r in rows[:8]:
                 s = "" if pd.isna(r["score"]) else f", score {r['score']:.2f}"
                 lines.append(f"    - {r['name']} [{r['id']}] ({r['evidence']}{s})")
-        sub = {"center": found[0], "neighbours": nb}
+        shown = {r["id"] for rows in nb.values() for r in rows[:8]}
+        near = edges[(((edges.subject == found[0]) & edges.object.isin(shown)) | ((edges.object == found[0]) & edges.subject.isin(shown)))]
+        if "verdict" in near.columns:
+            near = near[near.verdict == "keep"]
+        sub = {"center": found[0], "neighbours": nb, "edge_rows": near.drop_duplicates(["subject", "object"]).to_dict("records")}
     else:
         lines.append("I could not find any entity from the question in the graph.")
         sub = {}
@@ -111,10 +115,16 @@ if __name__ == "__main__":
     ap.add_argument("question", nargs="?")
     ap.add_argument("--entities", nargs="+", help="skip the LLM and give the entities directly")
     ap.add_argument("--base-url"); ap.add_argument("--model", default="gpt-oss")
+    ap.add_argument("--html", help="also write an interactive picture to this file")
     a = ap.parse_args()
     ents = a.entities
     if not ents:
         from bioagent.ingest.harness import openai_llm
         ents = extract_entities(openai_llm(a.base_url, os.environ["LLM_API_KEY"]), a.model, a.question)
         print("entities from the question:", ents)
-    print(answer(a.graph, ents)[0])
+    text, sub = answer(a.graph, ents)
+    print(text)
+    if a.html and sub.get("edge_rows"):
+        from bioagent.qa.visual import to_html
+        to_html(sub["edge_rows"], load(a.graph)[0], " / ".join(ents), a.html)
+        print("picture written to", a.html)

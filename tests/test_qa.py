@@ -23,3 +23,12 @@ assert "non-small cell lung carcinoma" in text and "Direct connection" in text
 text, sub = answer("x", ["EGFR"], graph=(nodes, edges)); assert "GRB2" in text
 text, _ = answer("x", ["nothing here"], graph=(nodes, edges)); assert "could not find" in text
 print("ALL PASSED")
+import tempfile, os
+from bioagent.qa.visual import to_html
+text, sub = answer("x", ["EGFR", "carcinoma"], graph=(nodes, edges))
+with tempfile.TemporaryDirectory() as d:
+    to_html(sub["edge_rows"], nodes, "t", f"{d}/a.html")
+    h = open(f"{d}/a.html").read()
+    assert "vis-network" in h and "UniProtKB:P1" in h and "pharos:disease_association" in h
+text, sub = answer("x", ["EGFR"], graph=(nodes, edges)); assert sub["edge_rows"]
+print("ALL PASSED")

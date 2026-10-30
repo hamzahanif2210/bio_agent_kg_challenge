@@ -101,14 +101,14 @@ TARGET_CACHE = CACHE.parent / "pharos_targets"
 _UNIPROT = re.compile(r"^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})$")
 
 
-def fetch_target(identifier, retries=3):
+def fetch_target(identifier, retries=3, refresh=False):
     """One target by gene symbol or UniProt accession (live API, cached on disk).
-    Returns the target dict, or None if Pharos has no such target."""
+    Returns the target dict, or None if Pharos has no such target. refresh=True ignores the cache."""
     ident = identifier.strip()
     q = {"uniprot": ident.upper()} if _UNIPROT.match(ident.upper()) else {"sym": ident}
     TARGET_CACHE.mkdir(parents=True, exist_ok=True)
     f = TARGET_CACHE / (re.sub(r"[^A-Za-z0-9_.-]", "_", ident.upper()) + ".json")
-    if f.exists():
+    if f.exists() and not refresh:
         cached = json.loads(f.read_text())
         if cached is None or cached.get("_schema") == SCHEMA_VERSION:
             return cached   # stale (older-format) records fall through and are refetched

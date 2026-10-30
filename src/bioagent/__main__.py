@@ -22,6 +22,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("ask", help="plain-language question -> the relevant part of the graph")
     a.add_argument("question", nargs="?"); a.add_argument("--entities", nargs="+")
+    a.add_argument("--html", help="also write an interactive picture to this file")
     a.add_argument("--model", default=os.environ.get("LLM_MODEL", "gpt-oss"))
     a.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
     x = sub.add_parser("explain", help="why does A connect to B? (sources, evidence, verdicts)")
@@ -30,6 +31,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     if args.cmd == "ask":
+        from bioagent.provenance.explain import load
         from bioagent.qa.ask import answer, extract_entities
         ents = args.entities
         if not ents:
@@ -38,7 +40,13 @@ def main(argv=None):
             from bioagent.ingest.harness import openai_llm
             ents = extract_entities(openai_llm(args.base_url, os.environ["LLM_API_KEY"]), args.model, args.question)
             print("entities from the question:", ents)
-        print(answer(args.graph, ents)[0])
+        graph = load(args.graph)
+        text, sub = answer(args.graph, ents, graph=graph)
+        print(text)
+        if args.html and sub.get("edge_rows"):
+            from bioagent.qa.visual import to_html
+            to_html(sub["edge_rows"], graph[0], " / ".join(ents), args.html)
+            print("picture written to", args.html)
     elif args.cmd == "explain":
         from bioagent.provenance.explain import explain, format_explanation
         print(format_explanation(explain(args.graph, args.a, args.b)))

@@ -39,25 +39,69 @@ The agent builds the graph; GNN/GCN/embedding models are then run to predict hel
 
 **New to the project? Start with [docs/what_we_need_to_do.md](docs/what_we_need_to_do.md)**, a plain-language guide to the goal, the scoring, the work packages and the calendar.
 
-## Our progress (as of 2026-10-26)
+## Our progress (as of 2026-10-30)
 
 | Area | Status |
 |---|---|
-| Shared graph format (nodes/edges Parquet with provenance columns) | Done (`schema/kg.py`) |
-| Full Pharos graph from the live API | Done: 397,636 nodes, 3,091,048 edges |
-| Leakage-safe evaluation (unordered-pair split, hard negatives, enrichment leak check) | Done (`eval/`) |
-| Baseline to beat (GraphSAGE on Pharos, 3 seeds, 4 edge types) | Done, see table below |
-| Ingest agent harness with a Pharos tool (cache, logs, caps, validation, leak guard) | Done; tested with a scripted model (`tests/test_harness.py`) |
-| Ingest agent run against the real Claude API | **Not yet** (needs `ANTHROPIC_API_KEY`) |
-| Additional source tools (UniProt, Open Targets, GO/MONDO, OptimusKG, Monarch) | **Not started** |
-| Clean / prune agent | **Not started** (placeholder) |
-| Filter (natural language to subgraph query) | **Not started** |
-| Maintain (auto-update) | **Not started** |
-| Edge explanation (`provenance/explain.py`) | Basic lookup only |
-| Enriched graph beating the baseline | **Not yet** (no enrichment source added) |
-| Answers from the organizers (split, metric, GNN, submission format) | **Not yet asked** |
+| Full Pharos graph from the live API, with per-edge evidence | Done: 397,636 nodes, 3,091,048 edges |
+| Leakage-safe evaluation (unordered-pair split, hard negatives, shared test set) | Done (`eval/`) |
+| Baselines (GraphSAGE, 3 seeds, 4 edge types) on plain Pharos and on the pruned graph | Done; pruning does not change link prediction (table below) |
+| **Ingest** agent harness, real LLM runs on NRP | Done (`ingest/`); Pharos is the only tool so far |
+| **Clean**, v1: rule-based pruning with Open Targets, GO/MONDO, UniProt, STRING scores | Done (`clean/prune.py`) |
+| **Clean**, v2: PubMed co-mention tiers and an LLM judge with retrieved evidence | Done (`clean/pubmed_tiers.py`, `clean/apply_judge.py`); judge covers the 5,000 highest-evidence uncertain edges |
+| **Clean**: CRAPome contaminant rule for AP-MS interactions | Done; prunes 4,574 BioPlex-only edges |
+| **Filter**: plain-language question to subgraph, with an interactive picture | Done (`qa/`) |
+| **Maintain**: re-fetch targets, report added / removed / re-scored edges | Done as a prototype (`ingest/update.py`), tested on a sample |
+| Explanations: why does A connect to B, with sources and verdicts | Done (`provenance/explain.py`) |
+| Standards: Biolink predicates checked against model 4.4.6; gene-protein split | Done (`standards/`); our own checker, not `kgx validate` |
+| Exports: KGX TSV and PyTorch Geometric, whole and pruned | Done (`export/`) |
+| Enriched graph (extra sources) beating the baseline | **Not yet** |
+| Answers from the organizers | **Not yet asked** |
 
-**Next steps:** (1) run the ingest agent for real on a small task; (2) add a first enrichment source and test it with the leak check; (3) measure whether the enriched graph beats the baseline on the hard-negative metric; (4) build the Clean step; (5) send the open questions below to the organizers.
+## Quick start (no graph expertise needed)
+
+Everything below runs from the repository root. On the cluster, heavy steps run as Slurm jobs, not on the login node.
+
+```bash
+. ./env.sh                                   # loads Python and the project (Alliance cluster)
+python -m bioagent ask --entities BRCA1 --html demo/brca1.html        # what is known about a protein or disease
+python -m bioagent ask --entities EGFR "non-small cell lung carcinoma" --html demo/egfr.html   # how two things connect
+python -m bioagent explain EGFR "non-small cell lung carcinoma"       # sources, evidence and verdict for each connection
+```
+
+Open the `.html` file in a browser: nodes are coloured by type, green edges were kept and dashed red edges were pruned. **Click an edge** to see where it comes from and why it was kept or pruned.
+
+To ask in a plain sentence, give the tool an LLM (it is only used to pick out the names; all facts come from the graph):
+
+```bash
+export LLM_BASE_URL=https://ellm.nrp-nautilus.io/v1 LLM_API_KEY=...      # your own key, never put it in the repo
+python -m bioagent ask "How is EGFR connected to non-small cell lung carcinoma?"
+```
+
+Name a node closely: `lung cancer` and `non-small cell lung carcinoma` are different nodes. A partial name is accepted and the match is shown.
+
+**Rebuild everything** from the fetched Pharos graph (rules, PubMed tiers, judge verdicts, exports) with one command: `sbatch scripts/run_pipeline.sbatch`. The slow inputs are separate jobs whose results are cached: `scripts/fetch_pharos_full.sbatch` (Pharos, hours), `scripts/pubmed_counts.sbatch` (PubMed counts, about 6 h, needs a free NCBI key in `NCBI_API_KEY`), `scripts/judge_tier3.sbatch` (LLM judge, about 7 h), `scripts/fetch_crapome.sbatch` (contaminant list, 20 min). **Keep up to date** with `sbatch scripts/update.sbatch 100`.
+
+**What you get** (in `exports/`, git-ignored; rebuild with `python -m bioagent export`): `whole.*` has every Pharos edge with a keep / prune verdict, confidence and reason; `pruned.*` has only the kept edges. Each comes as KGX TSV (`*.kgx/nodes.tsv`, `edges.tsv`) and PyTorch Geometric (`*.pyg.pt`):
+
+```python
+import torch
+d = torch.load("exports/pruned.pyg.pt", weights_only=False)
+data = d["data"]                  # HeteroData; edge_attr columns are in d["edge_attr_columns"]
+print(data.edge_types)            # e.g. ('Protein', 'physically_interacts_with', 'Protein')
+d["node_ids"]["Protein"][0]       # CURIE of node 0 of that type
+```
+
+## How the graph was pruned
+
+| Step | What it does | Edges decided |
+|---|---|---|
+| Rules (v1) | Protein interactions by score and number of supporting databases; disease links by independent confirmation (Open Targets) and database count; GO links by UniProt annotations and the GO hierarchy; obsolete terms | all |
+| CRAPome | BioPlex-only interactions with a frequent AP-MS contaminant are pruned | 4,574 pruned |
+| PubMed tiers | Weakly supported disease links: no PubMed article mentioning both is a confirmed prune; 10 or more co-mentions is a rescue | 139,301 pruned, 10,078 rescued |
+| LLM judge (gpt-oss) | Reads PubMed titles, the protein's UniProt function and the disease definition; a keep needs `p_real` of at least 0.8 | 5,000 judged: 2,595 rescued, 1,052 pruned |
+
+About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
 
 ## Approach
 
@@ -66,10 +110,10 @@ The agent follows the challenge loop:
 | Step | Goal | Module |
 |---|---|---|
 | **Ingest** | Pull disease, drug, gene, protein and ontology context from public sources; map to Biolink classes and OBO URIs | `src/bioagent/ingest/` |
-| **Filter** | Turn a natural-language question into a graph query for the relevant subgraph | *planned* |
+| **Filter** | Turn a natural-language question into a graph query for the relevant subgraph | `src/bioagent/qa/` |
 | **Clean** | Score edge confidence and prune erroneous or contextually wrong links | `src/bioagent/clean/` |
 | **Limit** | Cap graph size for performance | `src/bioagent/clean/` |
-| **Maintain** | Re-run to pick up new literature/data | *planned* |
+| **Maintain** | Re-run to pick up new literature/data | `src/bioagent/ingest/update.py` |
 
 Every edge carries provenance (source, evidence, confidence, method, timestamp), so any link can be traced back with `provenance/explain.py`.
 
