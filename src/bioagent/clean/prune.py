@@ -25,6 +25,8 @@ PRIOR_REACTOME = 0.8        # curated pathway interaction; Pharos gives no score
 MULTI_DB_CONF = {2: 0.6, 3: 0.7, 4: 0.8}   # disease edges backed by n independent databases (>=5 -> 0.9)
 SCORE_OK = 0.3              # a scored disease association at or above this is kept (DisGeNET-style cut-off)
 OT_STRONG = 0.3             # Open Targets direct association score that independently confirms an edge
+CRAPOME_MAX = 0.5           # a protein seen in more than this fraction of CRAPome negative-control AP-MS runs is a likely contaminant
+PRIOR_BIOPLEX_CONTAMINANT = 0.3   # BioPlex-only edge touching such a protein (below KEEP_THRESHOLD)
 CURATED_DISEASE_DBS = {"CTD", "DrugCentral Indication", "Monarch", "UniProt Disease"}
 
 
@@ -35,6 +37,7 @@ class Resources:
     mondo_obsolete: dict  # MONDO id -> replaced_by id or None
     uniprot_go: dict     # UniProt accession -> set of GO ids (direct annotations)
     ot: pd.DataFrame     # columns: uniprot, mondo, score (Open Targets direct association score)
+    crapome: dict = None  # UniProt accession -> fraction of CRAPome control runs detecting it (optional)
 
 
 def parse_obo(path, prefix):
@@ -71,13 +74,17 @@ def ancestors(term, parents, memo):
     return seen
 
 
-def _prune_ppi(edges, mask):
+def _prune_ppi(edges, mask, res):
     ev = edges.evidence[mask]
     src = ev.str.split(":", n=2).str[2]
     has_string, has_bp, has_re = (src.str.contains(s) for s in ("STRINGDB", "BioPlex", "Reactome"))
     s = edges.confidence[mask]
     fail = 1.0 - np.where(has_string & s.notna(), s, 0.0)
-    fail = fail * np.where(has_bp, 1 - PRIOR_BIOPLEX, 1.0) * np.where(has_re, 1 - PRIOR_REACTOME, 1.0)
+    # BioPlex-only edges (AP-MS, no independent support) touching a frequent CRAPome contaminant are likely artefacts
+    freq = lambda col: edges[col][mask].str.replace("UniProtKB:", "", regex=False).map(res.crapome or {}).fillna(0.0).to_numpy()
+    contam = has_bp & ~has_string & ~has_re & ((freq("subject") > CRAPOME_MAX) | (freq("object") > CRAPOME_MAX)).astype(bool)
+    prior_bp = np.where(contam, PRIOR_BIOPLEX_CONTAMINANT, PRIOR_BIOPLEX)
+    fail = fail * np.where(has_bp, 1 - prior_bp, 1.0) * np.where(has_re, 1 - PRIOR_REACTOME, 1.0)
     conf = pd.Series(1.0 - fail, index=ev.index)
     # one verdict per unordered pair (A-B and B-A rows must agree): use the best row
     a, b = edges.subject[mask].to_numpy(), edges.object[mask].to_numpy()
@@ -85,11 +92,13 @@ def _prune_ppi(edges, mask):
     key = pd.Series(lo, index=ev.index).str.cat(pd.Series(hi, index=ev.index), sep="|")
     conf = conf.groupby(key).transform("max")
     verdict = np.where(conf >= KEEP_THRESHOLD, "keep", "prune")
+    contam = pd.Series(contam, index=ev.index).groupby(key).transform("max").to_numpy()
     reason = [f"protein interaction supported by {sc}; combined confidence {c:.2f} "
               f"({'at or above' if c >= KEEP_THRESHOLD else 'below'} the {KEEP_THRESHOLD} cut-off)"
-              for sc, c in zip(src, conf)]
+              + ("; a partner is a frequent AP-MS contaminant in CRAPome and nothing else supports the edge" if k else "")
+              for sc, c, k in zip(src, conf, contam)]
     return pd.DataFrame({"verdict": verdict, "verdict_confidence": conf.round(3), "reason": reason,
-                         "rule": "ppi_score", "needs_review": False}, index=ev.index)
+                         "rule": np.where(contam, "ppi_crapome", "ppi_score"), "needs_review": False}, index=ev.index)
 
 
 def _prune_disease(edges, mask, res):
@@ -150,7 +159,7 @@ def prune_edges(edges, res):
     """edges: Pharos graph edge table (with evidence/confidence/attributes). Returns verdict table, same index."""
     ev = edges.evidence
     parts = [
-        _prune_ppi(edges, ev.str.startswith("pharos:ppi:").to_numpy()),
+        _prune_ppi(edges, ev.str.startswith("pharos:ppi:").to_numpy(), res),
         _prune_disease(edges, (ev == "pharos:disease_association").to_numpy(), res),
         _prune_go(edges, (ev == "pharos:go").to_numpy(), res),
     ]
@@ -166,7 +175,25 @@ def prune_edges(edges, res):
     return v.reindex(edges.index)
 
 
-def load_resources(src_dir):
+def load_crapome(path):
+    """CRAPome 'download background contaminant list' table -> {uniprot: fraction of control runs}.
+    Accepts a tab-separated file with a UniProt accession column ('Uniprot'/'UniProt'/'Entry'/'Prey') and either a
+    'frequency'-style column holding 'k/N', a fraction, or a percent; picks the first column whose name contains 'freq'
+    (or 'spec'->no). Fractions above 1 are read as percent."""
+    df = pd.read_csv(path, sep="\t")
+    acc = next(c for c in df.columns if c.lower() in ("uniprot", "uniprot id", "entry", "prey", "accession"))
+    fc = next(c for c in df.columns if "freq" in c.lower() or "occur" in c.lower())
+    def frac(x):
+        x = str(x)
+        if "/" in x:
+            k, n = x.split("/")[:2]
+            return float(k) / float(n)
+        v = float(x)
+        return v / 100 if v > 1 else v
+    return {str(a).strip(): frac(f) for a, f in zip(df[acc], df[fc]) if pd.notna(a) and pd.notna(f)}
+
+
+def load_resources(src_dir, crapome_path=None):
     """Load GO/MONDO/UniProt/Open Targets from the downloaded sources directory."""
     import glob
     go_obs, go_par = parse_obo(f"{src_dir}/go/go-basic.obo", "GO:")
@@ -184,4 +211,5 @@ def load_resources(src_dir):
     ot = ot[ot.diseaseId.str.startswith("MONDO_")].copy()
     ot["mondo"] = ot.diseaseId.str.replace("_", ":", n=1)
     ot = ot.merge(u2e, left_on="targetId", right_on="ensembl")[["uniprot", "mondo", "associationScore"]]
-    return Resources(go_obs, go_par, mo_obs, uniprot_go, ot.rename(columns={"associationScore": "score"}))
+    return Resources(go_obs, go_par, mo_obs, uniprot_go, ot.rename(columns={"associationScore": "score"}),
+                     load_crapome(crapome_path) if crapome_path else None)

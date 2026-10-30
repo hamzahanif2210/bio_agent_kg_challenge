@@ -50,5 +50,13 @@ assert v.verdict_confidence["ppi_multi"] > 0.7                                  
 from bioagent.clean.prune import KEEP_THRESHOLD
 assert ((v.verdict == "keep") == (v.verdict_confidence >= KEEP_THRESHOLD)).all(), v   # verdict must match the threshold
 assert v.verdict.notna().all() and v.reason.str.len().min() > 10 and len(v) == len(edges)
+# CRAPome: a BioPlex-only edge touching a frequent contaminant is pruned; STRING-backed edges and clean partners are not
+import dataclasses
+cres = dataclasses.replace(res, crapome={"P6": 0.8, "P8": 0.8, "P9": 0.1})
+cedges = pd.DataFrame([rows["ppi_bioplex"], E("UniProtKB:P1", "UniProtKB:P9", "pharos:ppi:BioPlex"),
+                       E("UniProtKB:P1", "UniProtKB:P8", "pharos:ppi:BioPlex,STRINGDB", 0.6)])
+cv = prune_edges(cedges, cres)
+assert list(cv.verdict) == ["prune", "keep", "keep"] and cv.rule.iloc[0] == "ppi_crapome" and "CRAPome" in cv.reason.iloc[0]
+assert prune_edges(cedges, res).verdict.iloc[0] == "keep"          # without a CRAPome table nothing changes
 print(v[["verdict", "verdict_confidence", "rule"]].to_string())
 print("ALL PASSED")
