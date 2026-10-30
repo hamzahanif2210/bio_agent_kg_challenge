@@ -16,9 +16,14 @@ SHOW = ["subject", "predicate", "object", "source", "evidence", "confidence", "m
         "attributes", "verdict", "verdict_confidence", "reason", "rule", "needs_review", "n_reported"]
 
 
-def load(prefix):
+def load(prefix, standard=False):
+    """(nodes, edges). standard=True shows the specific Biolink predicates (as in the exports) instead of the generic ones."""
     # `whole` graphs are written as <prefix>.nodes.parquet / <prefix>.edges.parquet
-    return pd.read_parquet(f"{prefix}.nodes.parquet"), pd.read_parquet(f"{prefix}.edges.parquet")
+    nodes, edges = pd.read_parquet(f"{prefix}.nodes.parquet"), pd.read_parquet(f"{prefix}.edges.parquet")
+    if standard:
+        from bioagent.standards.biolink import specialise
+        edges = specialise(nodes, edges)
+    return nodes, edges
 
 
 def resolve(nodes, x):
@@ -41,7 +46,7 @@ def _rows(df):
 def explain(prefix, a, b, max_paths=5, graph=None):
     """Returns a dict: both nodes, direct edges (with provenance and verdicts), and the best
     two-step paths through a shared neighbour. `graph` = (nodes, edges) to avoid reloading."""
-    nodes, e = graph if graph is not None else load(prefix)
+    nodes, e = graph if graph is not None else load(prefix, standard=True)
     ida, idb = resolve(nodes, a), resolve(nodes, b)
     name = dict(zip(nodes.id, nodes.name))
     cat = dict(zip(nodes.id, nodes.category))

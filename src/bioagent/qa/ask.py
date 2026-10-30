@@ -72,7 +72,7 @@ def neighbours(edges, nodes, node_id, top=15, kept_only=True):
 
 def answer(prefix, entities, graph=None):
     """entities: list of names/ids. Returns (text, subgraph dict)."""
-    nodes, edges = graph if graph is not None else load(prefix)
+    nodes, edges = graph if graph is not None else load(prefix, standard=True)
     idx = Index(nodes, edges)
     found, notes = [], []
     for ent in entities:

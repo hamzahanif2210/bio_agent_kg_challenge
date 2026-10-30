@@ -224,6 +224,17 @@ GraphSAGE with learned embeddings (no node features), 100 epochs, mean ± std ov
 
 Trust the hard-negative column. Protein-disease drops from 0.975 to 0.525 once negatives match in degree, so the model mostly learns node popularity; protein-GO behaves the same way. Protein-protein is the most informative target (0.686 under hard negatives, many test pairs), though its seed spread is larger. The ligand-protein random-negative score is below 0.5, which we have not yet explained. These numbers use our own GNN; the organizers' protocol is still unconfirmed. An earlier run on a truncated graph (10 items per list) gave different numbers and should be ignored.
 
+### Does pruning or restructuring change link prediction? (hard-negative AUROC, 3 seeds)
+
+| Target edges | Plain Pharos | Pruned v3 (shared test edges) | With gene nodes (own split) |
+|---|---|---|---|
+| protein-disease | 0.525 ± 0.000 | 0.538 ± 0.004 | 0.529 ± 0.001 |
+| protein-GO term | 0.590 ± 0.003 | 0.583 ± 0.003 | 0.589 ± 0.015 |
+| ligand-protein | 0.626 ± 0.011 | 0.609 ± 0.012 | 0.624 ± 0.013 |
+| protein-protein | 0.686 ± 0.037 | 0.682 ± 0.034 | 0.656 ± 0.013 |
+
+Pruned v3 is trained on the kept edges only but scored on the same hidden edges as plain Pharos (`--ref`), so the two columns answer the same questions (`scripts/baseline_array.sbatch data/processed/pharos_pruned_v3.pruned prunedv3 data/processed/pharos_evidence`). The gene-node graph changes the endpoints of the disease edges, so it cannot share the test set and uses its own split; treat differences below about 0.02 as noise. **Result: none of the differences is clearly larger than the seed spread, so pruning and the gene split neither help nor hurt link prediction with this model.** The graph is cleaner and better explained, but we cannot claim a prediction gain. Link prediction is also a weak yardstick for pruning: the organizers' gold set is the real judge.
+
 ### Leakage rules (from the literature survey, `documents/muse-1.md`)
 
 Published biomedical link-prediction scores are often inflated. Our results only count if we follow these:

@@ -40,7 +40,7 @@ def main(argv=None):
             from bioagent.ingest.harness import openai_llm
             ents = extract_entities(openai_llm(args.base_url, os.environ["LLM_API_KEY"]), args.model, args.question)
             print("entities from the question:", ents)
-        graph = load(args.graph)
+        graph = load(args.graph, standard=True)
         text, sub = answer(args.graph, ents, graph=graph)
         print(text)
         if args.html and sub.get("edge_rows"):
