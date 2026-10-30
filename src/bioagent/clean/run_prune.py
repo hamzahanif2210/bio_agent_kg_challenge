@@ -1,6 +1,6 @@
 """Apply the v1 pruning rules to a Pharos graph and write both graphs.
 
-  python -m bioagent.clean.run_prune data/processed/pharos_evidence /scratch/hamza95/bio_kg_data data/processed/pharos_pruned
+  python -m bioagent.clean.run_prune data/processed/pharos_evidence /scratch/hamza95/bio_kg_data data/processed/pharos_pruned [CRAPOME_TSV]
 
 Outputs (PREFIX = last argument):
   PREFIX.whole.{nodes,edges}.parquet   every edge with verdict columns
@@ -15,9 +15,10 @@ from bioagent.schema.kg import read_kg
 
 if __name__ == "__main__":
     graph, src, out = sys.argv[1:4]
+    crapome = sys.argv[4] if len(sys.argv) > 4 else None
     nodes, edges = read_kg(graph)
     print("loading resources...", flush=True)
-    res = load_resources(src)
+    res = load_resources(src, crapome)
     print("pruning", len(edges), "edges...", flush=True)
     v = prune_edges(edges, res)
     whole = edges.join(v)

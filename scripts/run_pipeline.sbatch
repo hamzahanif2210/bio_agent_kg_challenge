@@ -16,7 +16,8 @@ set -e
 cd /project/rpp-nahee/hamza95/agent_challenge
 . ./env.sh
 P=data/processed
-python -u -m bioagent.clean.run_prune $P/pharos_evidence /scratch/hamza95/bio_kg_data $P/pharos_pruned
+CRAP=data/external/crapome_human.tsv   # optional: from scripts/fetch_crapome.sbatch
+python -u -m bioagent.clean.run_prune $P/pharos_evidence /scratch/hamza95/bio_kg_data $P/pharos_pruned $( [ -f $CRAP ] && echo $CRAP )
 FINAL=$P/pharos_pruned
 if [ -f $P/pubmed_counts.jsonl ]; then
   python -u -m bioagent.clean.pubmed_tiers $FINAL $P/pubmed_counts.jsonl $P/pharos_pruned_v2; FINAL=$P/pharos_pruned_v2

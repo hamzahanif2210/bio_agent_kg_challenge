@@ -5,16 +5,17 @@ with the most specific Biolink predicate each edge type supports. Node classes a
 Rules (subject class -> object class, evidence):
   Protein  - Protein          physically_interacts_with  when a physical-interaction source supports it (BioPlex AP-MS,
                               Reactome); interacts_with when only STRING (functional association, not always physical)
-  Protein  - Disease          gene_associated_with_condition (Biolink: GeneOrGeneProduct -> Disease)
+  Protein  - Disease          associated_with   (the Biolink 4.4.6 gene-disease predicate gene_associated_with_condition has
+                              domain `gene`, so it does not fit a Protein node; it becomes valid once we add gene nodes)
   Chemical - Protein          physically_interacts_with   (ligand activity)
-  Protein  - MolecularActivity   enables
+  Protein  - MolecularActivity   capable_of     (`enables` has domain `physical entity`, which Protein does not satisfy)
   Protein  - BiologicalProcess   actively_involved_in
   Protein  - CellularComponent   located_in
-The original predicate is kept in `original_predicate`.
+The original predicate is kept in `original_predicate`. Checked against the Biolink model with scripts/validate_biolink.py.
 """
 import pandas as pd
 
-GO_PREDICATE = {"biolink:MolecularActivity": "biolink:enables",
+GO_PREDICATE = {"biolink:MolecularActivity": "biolink:capable_of",
                 "biolink:BiologicalProcess": "biolink:actively_involved_in",
                 "biolink:CellularComponent": "biolink:located_in"}
 PHYSICAL_SOURCES = ("BioPlex", "Reactome")
@@ -28,7 +29,7 @@ def specialise(nodes, edges):
     ppi = ev.str.startswith("pharos:ppi:")
     physical = ppi & ev.str.contains("|".join(PHYSICAL_SOURCES))
     e.loc[physical, "predicate"] = "biolink:physically_interacts_with"
-    e.loc[ev == "pharos:disease_association", "predicate"] = "biolink:gene_associated_with_condition"
+    e.loc[ev == "pharos:disease_association", "predicate"] = "biolink:associated_with"
     e.loc[ev == "pharos:ligand_activity", "predicate"] = "biolink:physically_interacts_with"
     go = ev == "pharos:go"
     e.loc[go, "predicate"] = e.object[go].map(cat).map(GO_PREDICATE).fillna("biolink:related_to")

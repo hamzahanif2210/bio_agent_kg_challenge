@@ -17,7 +17,7 @@ edges = pd.DataFrame([e("UniProtKB:P1", "biolink:interacts_with", "UniProtKB:P2"
                       e("UniProtKB:P1", "biolink:related_to", "GO:2", "pharos:go", v="prune"),
                       e("CHEM:1", "biolink:interacts_with", "UniProtKB:P1", "pharos:ligand_activity")])
 s = specialise(nodes, edges)
-assert list(s.predicate) == ["biolink:interacts_with", "biolink:physically_interacts_with", "biolink:gene_associated_with_condition",
+assert list(s.predicate) == ["biolink:interacts_with", "biolink:physically_interacts_with", "biolink:associated_with",
                              "biolink:actively_involved_in", "biolink:located_in", "biolink:physically_interacts_with"]
 assert list(s.original_predicate) == list(edges.predicate)
 with tempfile.TemporaryDirectory() as d:
@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as d:
     to_pyg(nodes, s, f"{d}/g.pt")
     o = torch.load(f"{d}/g.pt", weights_only=False)
     data = o["data"]
-    assert data["Protein", "gene_associated_with_condition", "Disease"].edge_index.tolist() == [[0], [0]]
+    assert data["Protein", "associated_with", "Disease"].edge_index.tolist() == [[0], [0]]
     a = data["Protein", "actively_involved_in", "BiologicalProcess"].edge_attr[0].tolist()
     assert a[1] == 0.0 and abs(a[2] - 0.9) < 1e-6 and a[3] == 1.0                      # no source score, kept
     assert data["Protein", "located_in", "CellularComponent"].edge_attr[0, 3] == 0.0      # pruned edge is marked, not dropped

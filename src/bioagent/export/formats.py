@@ -5,7 +5,7 @@
 
 Writes OUT.kgx/{nodes,edges}.tsv and OUT.pyg.pt. Predicates are specialised first (bioagent.standards.biolink).
 Load the PyG file with:  data = torch.load("OUT.pyg.pt", weights_only=False)["data"]
-  data["Protein", "gene_associated_with_condition", "Disease"].edge_index / .edge_attr   (see EDGE_ATTR)
+  data["Protein", "associated_with", "Disease"].edge_index / .edge_attr   (see EDGE_ATTR)
   torch.load(...)["node_ids"]["Protein"][i] is the CURIE of node i of that type.
 """
 import os
