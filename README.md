@@ -235,6 +235,8 @@ Trust the hard-negative column. Protein-disease drops from 0.975 to 0.525 once n
 
 Pruned v3 is trained on the kept edges only but scored on the same hidden edges as plain Pharos (`--ref`), so the two columns answer the same questions (`scripts/baseline_array.sbatch data/processed/pharos_pruned_v3.pruned prunedv3 data/processed/pharos_evidence`). The gene-node graph changes the endpoints of the disease edges, so it cannot share the test set and uses its own split; treat differences below about 0.02 as noise. **Result: none of the differences is clearly larger than the seed spread, so pruning and the gene split neither help nor hurt link prediction with this model.** The graph is cleaner and better explained, but we cannot claim a prediction gain. Link prediction is also a weak yardstick for pruning: the organizers' gold set is the real judge.
 
+**Enrichment tried: GO and MONDO hierarchies** (`enrich/ontology.py`: 30,500 GO and 16,565 MONDO `subclass_of` edges, 5,834 ancestor nodes added to pruned v3; same hidden edges). Hard-negative AUROC against pruned v3: protein-disease 0.535 ± 0.002 (0.538), protein-GO 0.579 ± 0.003 (0.583), ligand-protein 0.608 (0.609), protein-protein 0.681 (0.682). **No gain**: with learned embeddings and no node features the model does not exploit the hierarchy. Enrichment stays in the repo as a tested tool but is not part of the submitted graphs.
+
 ### Leakage rules (from the literature survey, `documents/muse-1.md`)
 
 Published biomedical link-prediction scores are often inflated. Our results only count if we follow these:
