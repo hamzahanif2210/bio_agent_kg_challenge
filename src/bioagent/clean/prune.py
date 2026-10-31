@@ -155,6 +155,36 @@ def _prune_go(edges, mask, res):
     return pd.DataFrame(out, index=g.index, columns=["verdict", "verdict_confidence", "reason", "rule", "needs_review"])
 
 
+def remap_obsolete(edges, res, depth=5):
+    """Obsolete GO/MONDO terms that name a replacement are renames, not evidence against the edge: point the edge at the
+    replacement (following replacement chains) and keep the old id in `original_object`. Obsolete terms with no replacement
+    are left alone and pruned by the obsolescence rules. If the protein already has an edge to the replacement, that edge wins."""
+    e = edges.copy()
+    e["original_object"] = None
+    for obs in (res.mondo_obsolete, res.go_obsolete):
+        rep = {k: v for k, v in obs.items() if v}
+
+        def final(k):
+            for _ in range(depth):
+                nxt = rep.get(k)
+                if nxt is None or nxt == k:
+                    break
+                k = nxt
+            return k
+        mask = e.object.isin(rep)
+        if mask.any():
+            new = e.object[mask].map(final)
+            ok = ~new.isin(set(obs) - set(rep)).to_numpy() & (new != e.object[mask]).to_numpy()   # chain must end at a live term
+            idx = e.index[mask][ok]
+            e.loc[idx, "original_object"] = e.loc[idx, "object"]
+            e.loc[idx, "object"] = new[ok].to_numpy()
+    first = e.original_object.isna().to_numpy()
+    order = np.argsort(~first, kind="stable")                  # unmapped (original) edges sort first and win the dedupe
+    keep = np.zeros(len(e), bool)
+    keep[order[~e.iloc[order].duplicated(["subject", "object", "evidence"]).to_numpy()]] = True
+    return e[keep]
+
+
 def prune_edges(edges, res):
     """edges: Pharos graph edge table (with evidence/confidence/attributes). Returns verdict table, same index."""
     ev = edges.evidence

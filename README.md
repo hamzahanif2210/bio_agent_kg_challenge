@@ -97,11 +97,12 @@ d["node_ids"]["Protein"][0]       # CURIE of node 0 of that type
 | Step | What it does | Edges decided |
 |---|---|---|
 | Rules (v1) | Protein interactions by score and number of supporting databases; disease links by independent confirmation (Open Targets) and database count; GO links by UniProt annotations and the GO hierarchy; obsolete terms | all |
+| Obsolete terms | An obsolete GO or MONDO term that names a replacement is a rename, so the edge is moved to the replacement (old id kept in `original_object`); with no replacement it is pruned | 10,006 remapped |
 | CRAPome | BioPlex-only interactions with a frequent AP-MS contaminant are pruned | 4,574 pruned |
 | PubMed tiers | Weakly supported disease links: no PubMed article mentioning both is a confirmed prune; 10 or more co-mentions is a rescue | 139,301 pruned, 10,078 rescued |
 | LLM judge (gpt-oss) | Reads PubMed titles, the protein's UniProt function and the disease definition; a keep needs `p_real` of at least 0.8 | 5,000 judged: 2,595 rescued, 1,052 pruned |
 
-About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
+Final graph: 3,089,014 edges, of which 2,832,859 are kept and 256,155 pruned. About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
 
 ## Approach
 

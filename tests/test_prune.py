@@ -58,5 +58,16 @@ cedges = pd.DataFrame([rows["ppi_bioplex"], E("UniProtKB:P1", "UniProtKB:P9", "p
 cv = prune_edges(cedges, cres)
 assert list(cv.verdict) == ["prune", "keep", "keep"] and cv.rule.iloc[0] == "ppi_crapome" and "CRAPome" in cv.reason.iloc[0]
 assert prune_edges(cedges, res).verdict.iloc[0] == "keep"          # without a CRAPome table nothing changes
+# obsolete terms with a replacement are remapped, not pruned
+from bioagent.clean.prune import remap_obsolete
+res2 = dataclasses.replace(res, go_obsolete={"GO:OLD": "GO:NEW", "GO:GONE": None, "GO:CHAIN": "GO:OLD"}, mondo_obsolete={"MONDO:OLD": None})
+redges = pd.DataFrame([E("UniProtKB:P1", "GO:OLD", "pharos:go"), E("UniProtKB:P1", "GO:GONE", "pharos:go"),
+                       E("UniProtKB:P2", "GO:CHAIN", "pharos:go"), E("UniProtKB:P2", "GO:NEW", "pharos:go"),
+                       E("UniProtKB:P3", "GO:OLD", "pharos:go"), E("UniProtKB:P3", "GO:NEW", "pharos:go")])
+r = remap_obsolete(redges, res2)
+assert len(r) == 4                                                       # P2 and P3 already had GO:NEW, so those remaps collapse
+assert set(r.object[r.subject == "UniProtKB:P1"]) == {"GO:NEW", "GO:GONE"}      # replaced -> remapped; no replacement -> left for pruning
+assert r[(r.subject == "UniProtKB:P1") & (r.object == "GO:NEW")].original_object.iloc[0] == "GO:OLD"
+assert r[(r.subject == "UniProtKB:P2")].original_object.isna().all()      # the edge that already pointed at GO:NEW is the one kept
 print(v[["verdict", "verdict_confidence", "rule"]].to_string())
 print("ALL PASSED")

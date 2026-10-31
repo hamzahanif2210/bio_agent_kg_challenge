@@ -25,6 +25,22 @@ def parse_names(path, prefix):
     return names
 
 
+def parse_info(path, prefix):
+    """{id: (name, namespace)} for live terms."""
+    info, cur, name = {}, None, None
+    for line in open(path):
+        line = line.strip()
+        if line.startswith("id: " + prefix):
+            cur, name = line[4:], None
+        elif line == "[Term]":
+            cur = None
+        elif cur and line.startswith("name: "):
+            name = line[6:]; info[cur] = (name, info.get(cur, ("", ""))[1])
+        elif cur and line.startswith("namespace: "):
+            info[cur] = (info.get(cur, ("", ""))[0], line[11:])
+    return info
+
+
 def hierarchy_edges(nodes, obo_path, prefix, source, edge_ts):
     """New nodes and subclass_of edges for all ancestors of the graph's terms with this id prefix."""
     obsolete, parents = parse_obo(obo_path, prefix)
