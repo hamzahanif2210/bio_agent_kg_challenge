@@ -1,0 +1,89 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,booktabs,hyperref,graphicx,enumitem}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+\setlist{nosep}
+\title{Pruning a Pharos knowledge graph with explained, source-checked verdicts\\\large Bio-Agent Knowledge Graph Construction Challenge, open-source track}
+\author{Hamza Hanif}
+\date{\today}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We turn the Pharos target database into a Biolink-aligned knowledge graph in which every edge carries a keep or prune verdict, a confidence, the rule that produced it and a plain-language reason. Verdicts come from source evidence (interaction scores, Open Targets, UniProt, GO and MONDO), a contaminant list (CRAPome), PubMed co-mention counts and, for the weakest disease links, an LLM judge that reads retrieved evidence. The LLM never creates edges. The final graph has 3,089,014 edges, of which 2,901,057 are kept. We release the whole and the pruned graph in KGX and PyTorch Geometric formats, a one-command pipeline, a command line and a small web interface. A link-prediction baseline shows that pruning neither helps nor hurts that task, so we make no claim of a prediction gain. Pruning accuracy has not been measured against a gold set; we state what was checked and what was not.
+\end{abstract}
+
+\section{Goal and design}
+The challenge asks for a knowledge graph of biomedical entities in which doubtful edges are pruned, with both the pruned and the whole graph available. We scored our choices against the four published criteria: usability, accuracy and pruning, explainability, and standards. Three principles follow.
+\begin{itemize}
+\item \textbf{Sources decide, the LLM proposes.} Every edge traces to a retrievable record. A model may rate an edge from evidence we retrieved for it, but it cannot add one from memory.
+\item \textbf{Nothing is deleted.} The whole graph keeps pruned edges with their reasons, so a user can overrule any verdict.
+\item \textbf{Say what was not shown.} Confidence values are heuristic rankings, not probabilities (Section~\ref{sec:limits}).
+\end{itemize}
+
+\section{Data and graph construction}
+We fetched all Pharos targets \cite{pharos} and built edges for protein--disease, protein--GO, ligand--protein and protein--protein relations, with nodes typed as Biolink classes \cite{biolink}. Supporting resources are Open Targets, UniProt, GO, MONDO, STRING, BioPlex, Reactome and the CRAPome contaminant repository \cite{crapome}. An optional \emph{gene-protein split} adds Ensembl Gene nodes joined to proteins by \texttt{has\_gene\_product} and moves disease links to the gene, because Biolink defines disease association on genes.
+
+Predicates were specialised from generic associations to Biolink predicates (for example \texttt{physically\_interacts\_with}, \texttt{capable\_of}, \texttt{actively\_involved\_in}, \texttt{located\_in}); the original predicate is kept. Our own checker validates predicate, domain and range against Biolink 4.4.6 and reports 0 problems on the gene-split graph. It is not \texttt{kgx validate}, which could not be installed on the cluster.
+
+\section{Pruning}
+Table~\ref{tab:rules} lists the steps in order. Every verdict stores the rule name, a reason string and a confidence.
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}p{3.2cm}p{8.3cm}r@{}}\toprule
+Step & Decision & Edges\\\midrule
+Source rules & Interaction score and number of supporting databases; Open Targets support and database count for diseases; UniProt annotations and the GO hierarchy for GO links & all\\
+Obsolete terms & An obsolete GO or MONDO term with a named replacement is a rename: the edge moves to the replacement and the old id is kept. Without a replacement it is pruned & 10,006 moved\\
+CRAPome & BioPlex-only interactions with a protein found in more than half of AP-MS control runs are pruned & 4,574 pruned\\
+PubMed tiers & Weak disease links with no PubMed article naming both ends are pruned; 10 or more articles is a candidate rescue & 139,301 pruned\\
+LLM judge & For 1--9 articles the judge reads titles, the UniProt function and the MONDO definition; a keep needs $p_{\mathrm{real}}\ge 0.8$ & 5,000 judged\\
+GO not in UniProt & Kept at confidence 0.45 and flagged for review, because absence from UniProt is weak evidence only & 68,198 kept\\\bottomrule
+\end{tabular}
+\caption{Pruning steps. Counts are from the final build.}\label{tab:rules}
+\end{table}
+
+The judge (gpt-oss through an OpenAI-compatible endpoint) rescued 2,595 weak links and pruned 1,052. About 30,000 links with 1--9 articles were not judged; they keep the rule verdict and are flagged \texttt{needs\_review}.
+
+\paragraph{Second opinion on the 10+ article rescue.} Counting articles that name both ends is crude: a syndrome and the gene of a different syndrome can co-occur often. One such edge (SHOC2 and Costello syndrome) was rescued wrongly. We therefore also send the 10,078 rescued edges through the judge, and a rescue stands only if the judge agrees with $p_{\mathrm{real}}\ge 0.8$; otherwise the edge is pruned under rule \texttt{pubmed\_rescue\_rejected}.
+\par\smallskip\noindent\input{rescue_results}
+
+\section{Explainability and usability}
+\texttt{bioagent explain A B} prints, for two entities, the direct edges and the best shared neighbours with source, evidence, score, verdict and reason. \texttt{bioagent ask} finds the entities in a question (an LLM is used only to pick out names) and returns the answer from the graph with an interactive picture: kept edges are green, pruned edges dashed red, and clicking an edge shows its lineage. \texttt{bioagent serve} wraps this in a local web page. \texttt{sbatch scripts/run\_pipeline.sbatch} rebuilds every graph from cached inputs, and a small sample graph (10 cancer proteins and neighbours, 12,222 edges) lets a new user try everything straight after cloning. A fresh-clone test (clone, run all tests, run the sample quick start, export) passes. Exports follow KGX TSV and PyTorch Geometric \cite{pyg}; the full graphs, about 2.5\,GB, are on a private Hugging Face dataset. A maintenance mode diffs a re-fetched Pharos subset against the stored edges and reports additions, removals and changes.
+
+\section{Evaluation}
+\paragraph{Blind LLM review.} Eight models reviewed a 64-edge sample of verdicts and a 150-edge sample of GO verdicts without seeing our verdict. The kept edges and the no-literature and CRAPome prunes were rated plausible or implausible in line with our verdicts. Reviewers found most GO links absent from UniProt plausible, so we changed that rule from prune to a low-confidence keep. They also called many pruned links with obsolete disease terms plausible, which is why term renaming was added. These models lean toward ``plausible'', so this is a smoke test and not an accuracy figure.
+
+\paragraph{Link prediction.} A GraphSAGE model \cite{sage} with hard negatives, three seeds, scored on hidden edges (Table~\ref{tab:lp}). The pruned graph is trained on kept edges only but scored on the same hidden edges as plain Pharos. No difference is clearly larger than the seed spread, and adding GO/MONDO ancestors did not help either.
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}lccc@{}}\toprule
+Target edges & Plain Pharos & Pruned & With gene nodes\\\midrule
+protein--disease & 0.525 $\pm$ 0.000 & 0.538 $\pm$ 0.004 & 0.529 $\pm$ 0.001\\
+protein--GO & 0.590 $\pm$ 0.003 & 0.583 $\pm$ 0.003 & 0.589 $\pm$ 0.015\\
+ligand--protein & 0.626 $\pm$ 0.011 & 0.609 $\pm$ 0.012 & 0.624 $\pm$ 0.013\\
+protein--protein & 0.686 $\pm$ 0.037 & 0.682 $\pm$ 0.034 & 0.656 $\pm$ 0.013\\\bottomrule
+\end{tabular}
+\caption{Hard-negative AUROC (mean $\pm$ s.d. over 3 seeds). The gene-split column uses its own test split.}\label{tab:lp}
+\end{table}
+
+\section{Limits}\label{sec:limits}
+\begin{itemize}
+\item The pruning priors (thresholds, the 0.45 and 0.3 priors) are heuristics; there is no gold set to calibrate them and no domain expert has reviewed the 64-edge sample. Confidence is a ranking, not a probability.
+\item About 30,000 weak disease links were never judged.
+\item 504 disease edges on obsolete MONDO terms with no replacement stay pruned; only 188 have one suggested current term, and a suggestion is not a rename.
+\item Article counts are co-mentions of names, not statements of a relation.
+\item The maintenance mode found no changes in its one test, so it is not shown to detect a real change.
+\item The interface pictures load a drawing library from the internet and were checked by automated tests, not by eye in a browser.
+\item The Biolink check is our own implementation.
+\end{itemize}
+
+\section{Availability}
+Code and a sample graph: \url{https://github.com/hamzahanif2210/bio_agent_kg_challenge} (MIT licence). Full graphs: private Hugging Face dataset, access on request until the repository is made public. Upstream sources keep their own licences.
+
+\begin{thebibliography}{9}\small
+\bibitem{pharos} Kelleher, K.J.\ et al.\ Pharos 2023: an integrated resource for the understudied human proteome. \emph{Nucleic Acids Res.} 51, D1405 (2023).
+\bibitem{biolink} Unni, D.R.\ et al.\ Biolink Model: a universal schema for knowledge graphs in clinical, biomedical, and translational science. \emph{Clin.\ Transl.\ Sci.} 15, 1848 (2022).
+\bibitem{crapome} Mellacheruvu, D.\ et al.\ The CRAPome: a contaminant repository for affinity purification--mass spectrometry data. \emph{Nat.\ Methods} 10, 730 (2013).
+\bibitem{pyg} Fey, M., Lenssen, J.E.\ Fast graph representation learning with PyTorch Geometric. ICLR Workshop (2019).
+\bibitem{sage} Hamilton, W., Ying, Z., Leskovec, J.\ Inductive representation learning on large graphs. NeurIPS (2017).
+\end{thebibliography}
+\end{document}

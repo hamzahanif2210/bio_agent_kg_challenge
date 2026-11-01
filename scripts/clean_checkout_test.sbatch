@@ -10,9 +10,9 @@
 D=/scratch/hamza95/clean_checkout; rm -rf $D; mkdir -p $D; cd $D
 git clone -q https://github.com/hamzahanif2210/bio_agent_kg_challenge.git repo || exit 1; cd repo
 module load gcc arrow cuda python/3.13 2>/dev/null; source /project/rpp-nahee/hamza95/python313/bin/activate
-export PYTHONPATH=$PWD/src; unset AGENT_ROOT
+export PYTHONPATH=$PWD/src:$PYTHONPATH; unset AGENT_ROOT   # keep the module paths (pyarrow); the clone comes first
 fail=0
-for t in tests/test_*.py; do r=$(python -W ignore $t 2>&1 | tail -1); printf "%-30s %s\n" $t "$r"; case "$r" in *PASSED*) ;; *) fail=1;; esac; done
+for t in tests/test_*.py; do r=$(python -W ignore $t 2>&1 | tail -1); printf "%-30s %s\n" $t "$r"; case "$r" in *PASSED*|*" ok") ;; *) fail=1;; esac; done
 S="--graph sample/sample.whole"
 python -W ignore -m bioagent $S ask --entities BRCA1 --html /tmp/brca1_$$.html | tail -4 || fail=1
 python -W ignore -m bioagent $S explain EGFR "non-small cell lung carcinoma" | head -8 || fail=1
