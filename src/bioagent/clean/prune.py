@@ -151,7 +151,9 @@ def _prune_go(edges, mask, res):
             if go in prop[up]:
                 out.append(("keep", 0.85, "implied by a more specific UniProt annotation (GO hierarchy)", "go_inherited", False))
             else:
-                out.append(("prune", 0.35, "not among UniProt's annotations or their parent terms", "go_unsupported", True))
+                # weak negative evidence only: Pharos GO includes annotations beyond UniProt's reviewed set, and reviewers (8 LLMs) rated these
+                # about as plausible as UniProt-confirmed ones, so keep at low confidence and flag for review
+                out.append(("keep", 0.45, "not among UniProt's annotations or their parent terms; weak negative evidence only, kept at low confidence", "go_unsupported", True))
     return pd.DataFrame(out, index=g.index, columns=["verdict", "verdict_confidence", "reason", "rule", "needs_review"])
 
 

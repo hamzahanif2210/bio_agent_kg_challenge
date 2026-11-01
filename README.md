@@ -102,7 +102,9 @@ d["node_ids"]["Protein"][0]       # CURIE of node 0 of that type
 | PubMed tiers | Weakly supported disease links: no PubMed article mentioning both is a confirmed prune; 10 or more co-mentions is a rescue | 139,301 pruned, 10,078 rescued |
 | LLM judge (gpt-oss) | Reads PubMed titles, the protein's UniProt function and the disease definition; a keep needs `p_real` of at least 0.8 | 5,000 judged: 2,595 rescued, 1,052 pruned |
 
-Final graph: 3,089,014 edges, of which 2,832,859 are kept and 256,155 pruned. About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
+GO links not among UniProt's annotations or their parent terms are kept at low confidence (0.45, rule `go_unsupported`, 68,198 edges, flagged `needs_review`): eight blind LLM reviewers rated most of them plausible, so absence from UniProt is weak evidence only.
+
+Final graph: 3,089,014 edges, of which 2,901,057 are kept and 187,957 pruned. About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
 
 ## Approach
 

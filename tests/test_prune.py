@@ -42,7 +42,7 @@ exp = {"ppi_hi": ("keep", "ppi_score"), "ppi_lo": ("prune", "ppi_score"), "ppi_r
        "dis_multi": ("keep", "disease_multi_db"), "dis_scored": ("keep", "disease_scored"),
        "dis_curated": ("keep", "disease_single_curated"), "dis_weak": ("prune", "disease_weak_only"),
        "go_obs": ("prune", "go_obsolete"), "go_direct": ("keep", "go_direct"), "go_inherit": ("keep", "go_inherited"),
-       "go_unsupp": ("prune", "go_unsupported"), "go_unchk": ("keep", "go_unchecked"), "ligand": ("keep", "ligand_default")}
+       "go_unsupp": ("keep", "go_unsupported"), "go_unchk": ("keep", "go_unchecked"), "ligand": ("keep", "ligand_default")}
 for k, (verdict, rule) in exp.items():
     assert (v.verdict[k], v.rule[k]) == (verdict, rule), (k, v.loc[k].to_dict())
 assert v.verdict_confidence["ppi_rev_a"] == v.verdict_confidence["ppi_rev_b"] == 0.9   # pair-consistent
