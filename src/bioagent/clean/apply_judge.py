@@ -39,11 +39,37 @@ def apply_judge(whole, judged, model):
     return w
 
 
+def check_rescues(whole, judged, model):
+    """Second opinion on the 10+ co-mention rescue (rule pubmed_rescue). A rescue now needs the judge to agree too:
+    keep with p_real >= RESCUE_P stays; anything else the judge returned (prune, uncertain, low-confidence keep) is demoted
+    to rule pubmed_rescue_rejected. Judge errors and edges the judge did not see are unchanged."""
+    w = whole.copy()
+    j = judged[judged.verdict != "error"].drop_duplicates(["subject", "object"], keep="last").set_index(["subject", "object"])
+    idx = w.index[w.rule == "pubmed_rescue"]
+    keys = pd.MultiIndex.from_arrays([w.subject[idx], w.object[idx]])
+    hit = keys.isin(j.index)
+    idx, keys = idx[hit], keys[hit]
+    r = j.loc[keys]
+    verdict, p, reason = r.verdict.to_numpy(), r.p_real.to_numpy(dtype=float), r.reason.astype(str).to_numpy()
+    if "judge_model" not in w:
+        w["judge_model"], w["judge_p_real"] = None, np.nan
+    w.loc[idx, "judge_model"], w.loc[idx, "judge_p_real"] = model, p
+    bad = ~((verdict == "keep") & (p >= RESCUE_P))
+    i = idx[bad]
+    w.loc[i, "verdict"], w.loc[i, "rule"], w.loc[i, "needs_review"] = "prune", "pubmed_rescue_rejected", False
+    w.loc[i, "verdict_confidence"] = np.round(1 - p[bad], 3)
+    w.loc[i, "reason"] = [f"10 or more PubMed co-mentions, but the LLM judge ({model}) did not confirm: {x}" for x in reason[bad]]
+    return w
+
+
 if __name__ == "__main__":
     graph, judged_path, out, model = sys.argv[1:5]
+    rescue_path = sys.argv[5] if len(sys.argv) > 5 else None   # optional judge results for the 10+ co-mention rescues
     nodes = pd.read_parquet(f"{graph}.whole.nodes.parquet")
     whole = pd.read_parquet(f"{graph}.whole.edges.parquet")
     w = apply_judge(whole, pd.read_json(judged_path, lines=True), model)
+    if rescue_path:
+        w = check_rescues(w, pd.read_json(rescue_path, lines=True), model)
     kept = w[w.verdict == "keep"]
     used = set(kept.subject) | set(kept.object)
     w.to_parquet(f"{out}.whole.edges.parquet"); nodes.to_parquet(f"{out}.whole.nodes.parquet")

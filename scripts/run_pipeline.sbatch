@@ -22,7 +22,7 @@ FINAL=$P/pharos_pruned
 if [ -f $P/pubmed_counts.jsonl ]; then
   python -u -m bioagent.clean.pubmed_tiers $FINAL $P/pubmed_counts.jsonl $P/pharos_pruned_v2; FINAL=$P/pharos_pruned_v2
   if [ -f $P/judge_tier3.jsonl ]; then
-    python -u -m bioagent.clean.apply_judge $FINAL $P/judge_tier3.jsonl $P/pharos_pruned_v3 gpt-oss; FINAL=$P/pharos_pruned_v3
+    python -u -m bioagent.clean.apply_judge $FINAL $P/judge_tier3.jsonl $P/pharos_pruned_v3 gpt-oss $( [ -f $P/judge_rescue.jsonl ] && echo $P/judge_rescue.jsonl ); FINAL=$P/pharos_pruned_v3
   fi
 fi
 for part in whole pruned; do python -u -W ignore -m bioagent.export.formats $FINAL.$part exports/$part; done

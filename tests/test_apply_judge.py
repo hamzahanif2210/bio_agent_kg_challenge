@@ -12,4 +12,12 @@ assert list(w.rule) == ["llm_rescue", "disease_weak_only", "llm_prune", "disease
 assert w.loc[0, "verdict_confidence"] == 0.99 and "later duplicate" in w.loc[0, "reason"]      # last judgment per pair wins
 assert w.loc[2, "verdict_confidence"] == 0.95 and not w.loc[2, "needs_review"]              # pruned with confidence 1 - p_real
 assert w.loc[1, "needs_review"] and w.loc[4, "judge_model"] is None and w.loc[5, "judge_model"] is None   # unjudged / other rules untouched
+
+from bioagent.clean.apply_judge import check_rescues
+r = pd.DataFrame([row(o, "pubmed_rescue") | dict(verdict="keep") for o in ["R1", "R2", "R3", "R4", "R5"]])
+jr = pd.DataFrame({"subject": ["P1"] * 4, "object": ["R1", "R2", "R3", "R4"], "verdict": ["keep", "prune", "keep", "error"],
+                   "p_real": [0.9, 0.1, 0.6, 0.5], "reason": ["a", "b", "c", "d"]})
+c = check_rescues(r, jr, "m")
+assert list(c.verdict) == ["keep", "prune", "prune", "keep", "keep"]
+assert list(c.rule) == ["pubmed_rescue", "pubmed_rescue_rejected", "pubmed_rescue_rejected", "pubmed_rescue", "pubmed_rescue"]   # error / unjudged unchanged
 print("ALL PASSED")

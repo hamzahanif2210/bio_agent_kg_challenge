@@ -13,13 +13,15 @@ from bioagent.ingest.harness import openai_llm
 ap = argparse.ArgumentParser()
 ap.add_argument("--base-url", default="https://ellm.nrp-nautilus.io/v1"); ap.add_argument("--model", default="gpt-oss")
 ap.add_argument("--budget", type=int, default=5000); ap.add_argument("--workers", type=int, default=6)
+ap.add_argument("--rule", default="disease_weak_only"); ap.add_argument("--lo", type=int, default=1); ap.add_argument("--hi", type=int, default=9)
+ap.add_argument("--ascending", action="store_true", help="fewest co-mentions first")
 ap.add_argument("--graph", default="data/processed/pharos_pruned_v2")
 ap.add_argument("--src", default="/scratch/hamza95/bio_kg_data"); ap.add_argument("--out", default="data/processed/judge_tier3.jsonl")
 a = ap.parse_args()
 
 nodes = pd.read_parquet(f"{a.graph}.whole.nodes.parquet", columns=["id", "name"]); name = dict(zip(nodes.id, nodes.name))
 e = pd.read_parquet(f"{a.graph}.whole.edges.parquet", columns=["subject", "object", "rule", "pubmed_count"])
-e = e[(e.rule == "disease_weak_only") & e.pubmed_count.between(1, 9)].sort_values("pubmed_count", ascending=False, kind="stable")
+e = e[(e.rule == a.rule) & e.pubmed_count.between(a.lo, a.hi)].sort_values("pubmed_count", ascending=a.ascending, kind="stable")
 e = e.drop_duplicates(["subject", "object"]).head(a.budget)
 up = pd.read_csv(f"{a.src}/uniprot/human_reviewed.tsv", sep="\t", usecols=["Entry", "Function [CC]"])
 func = {r[0]: str(r[1]).replace("FUNCTION: ", "") for r in up.itertuples(index=False) if isinstance(r[1], str)}

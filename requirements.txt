@@ -9,3 +9,4 @@ tqdm
 torch
 torch_geometric
 anthropic
+pyarrow

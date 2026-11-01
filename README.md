@@ -60,14 +60,17 @@ The agent builds the graph; GNN/GCN/embedding models are then run to predict hel
 
 ## Quick start (no graph expertise needed)
 
-Everything below runs from the repository root. On the cluster, heavy steps run as Slurm jobs, not on the login node.
+Everything below runs from the repository root. The repository includes a small sample graph (`sample/`: 10 well-known cancer proteins and their neighbours, about 12,000 edges), so this works straight after cloning. The full graphs are downloaded separately (see "Full graphs").
 
 ```bash
-. ./env.sh                                   # loads Python and the project (Alliance cluster)
-python -m bioagent ask --entities BRCA1 --html demo/brca1.html        # what is known about a protein or disease
-python -m bioagent ask --entities EGFR "non-small cell lung carcinoma" --html demo/egfr.html   # how two things connect
-python -m bioagent explain EGFR "non-small cell lung carcinoma"       # sources, evidence and verdict for each connection
+. ./env.sh                                   # loads Python and the project (Alliance cluster); elsewhere: pip install -r requirements.txt and set PYTHONPATH=src
+python -m bioagent --graph sample/sample.whole serve                  # web page: open http://127.0.0.1:8000, type BRCA1
+python -m bioagent --graph sample/sample.whole ask --entities BRCA1 --html demo/brca1.html     # what is known about a protein or disease
+python -m bioagent --graph sample/sample.whole ask --entities EGFR "non-small cell lung carcinoma" --html demo/egfr.html   # how two things connect
+python -m bioagent --graph sample/sample.whole explain EGFR "non-small cell lung carcinoma"    # sources, evidence and verdict for each connection
 ```
+
+With the full graph in place, drop `--graph sample/sample.whole` (the default is `data/processed/pharos_pruned_v3.whole`).
 
 Open the `.html` file in a browser: nodes are coloured by type, green edges were kept and dashed red edges were pruned. **Click an edge** to see where it comes from and why it was kept or pruned.
 

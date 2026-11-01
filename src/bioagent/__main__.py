@@ -3,6 +3,7 @@
   python -m bioagent ask "How is EGFR connected to non-small cell lung carcinoma?"
   python -m bioagent ask --entities BRCA1
   python -m bioagent explain EGFR "non-small cell lung carcinoma"
+  python -m bioagent serve --graph sample/sample.whole   (small web page: type names, get the answer and picture)
   python -m bioagent export                 (KGX + PyTorch Geometric files for the whole and pruned graphs)
 
 `ask` needs an LLM only to pick the names out of a sentence: set LLM_API_KEY and LLM_BASE_URL (and optionally LLM_MODEL),
@@ -27,6 +28,9 @@ def main(argv=None):
     a.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
     x = sub.add_parser("explain", help="why does A connect to B? (sources, evidence, verdicts)")
     x.add_argument("a"); x.add_argument("b")
+    v = sub.add_parser("serve", help="local web page: type names, get the answer and the picture")
+    v.add_argument("--port", type=int, default=8000)
+    v.add_argument("--model", default=os.environ.get("LLM_MODEL", "gpt-oss")); v.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
     sub.add_parser("export", help="write KGX + PyTorch Geometric files to exports/")
     args = ap.parse_args(argv)
 
@@ -47,6 +51,13 @@ def main(argv=None):
             from bioagent.qa.visual import to_html
             to_html(sub["edge_rows"], graph[0], " / ".join(ents), args.html)
             print("picture written to", args.html)
+    elif args.cmd == "serve":
+        from bioagent.qa.serve import serve
+        llm = None
+        if args.base_url and os.environ.get("LLM_API_KEY"):
+            from bioagent.ingest.harness import openai_llm
+            llm = openai_llm(args.base_url, os.environ["LLM_API_KEY"])
+        serve(args.graph, args.port, llm, args.model)
     elif args.cmd == "explain":
         from bioagent.provenance.explain import explain, format_explanation
         print(format_explanation(explain(args.graph, args.a, args.b)))
