@@ -15,21 +15,30 @@ import numpy as np
 import pandas as pd
 
 from bioagent.standards.biolink import specialise
+from bioagent.standards.ontology import annotate_edges, annotate_nodes
 
 EDGE_ATTR = ["source_score", "has_source_score", "verdict_confidence", "kept", "needs_review"]
 KGX_EXTRA = ["evidence", "confidence", "verdict", "verdict_confidence", "reason", "rule", "needs_review",
              "pubmed_count", "judge_model", "judge_p_real", "original_predicate", "timestamp", "method", "attributes"]
 
 
+def _biolink_prefix(col):
+    """Biolink's JSON-LD context has PHAROS but not PHAROS.LIGAND, and `kgx validate` rejects the latter."""
+    return pd.Series(col).astype(str).str.replace(r"^PHAROS\.LIGAND:", "PHAROS:", regex=True).to_numpy()
+
+
 def to_kgx(nodes, edges, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    n = pd.DataFrame({"id": nodes.id, "category": nodes.category, "name": nodes.name, "provided_by": "infores:" + nodes.source})
+    nodes = annotate_nodes(nodes)
+    n = pd.DataFrame({"id": _biolink_prefix(nodes.id), "category": nodes.category, "name": nodes.name, "provided_by": "infores:" + nodes.source,
+                      "ontology_class": nodes.ontology_class, "ontology_class_iri": nodes.ontology_class_iri, "iri": nodes.iri})
     n.to_csv(f"{out_dir}/nodes.tsv", sep="\t", index=False)
-    e = pd.DataFrame({"id": [f"edge-{i}" for i in range(len(edges))], "subject": edges.subject.to_numpy(),
-                      "predicate": edges.predicate.to_numpy(), "object": edges.object.to_numpy(),
+    e = pd.DataFrame({"id": [f"edge-{i}" for i in range(len(edges))], "subject": _biolink_prefix(edges.subject.to_numpy()),
+                      "predicate": edges.predicate.to_numpy(), "object": _biolink_prefix(edges.object.to_numpy()),
                       "primary_knowledge_source": "infores:" + edges.source.to_numpy(),
                       "knowledge_level": "not_provided", "agent_type": "not_provided"})
-    for c in KGX_EXTRA:
+    edges = annotate_edges(edges)
+    for c in KGX_EXTRA + ["predicate_ontology", "predicate_iri"]:
         if c in edges.columns:
             e[c] = edges[c].to_numpy()
     e.to_csv(f"{out_dir}/edges.tsv", sep="\t", index=False)
@@ -39,7 +48,8 @@ def _short(curie):
     return curie.split(":", 1)[1]
 
 
-def to_pyg(nodes, edges, path):
+def to_pyg(nodes, edges, path, features=None):
+    """features: optional {name: (ids, matrix)}; each becomes data[type].x_<name> (zeros for nodes without a row), so a model can use them."""
     import torch
     from torch_geometric.data import HeteroData
     ntype = dict(zip(nodes.id, nodes.category.map(_short)))
@@ -48,6 +58,12 @@ def to_pyg(nodes, edges, path):
         node_ids[t] = g.id.tolist()
         index[t] = {i: k for k, i in enumerate(node_ids[t])}
         data[t].num_nodes = len(g)
+        for fname, (fids, fx) in (features or {}).items():
+            row = {i: k for k, i in enumerate(fids)}
+            hit = [(k, row[i]) for k, i in enumerate(node_ids[t]) if i in row]
+            if hit:
+                m = np.zeros((len(g), fx.shape[1]), np.float32); m[[a for a, _ in hit]] = fx[[b for _, b in hit]]
+                data[t][f"x_{fname}"] = torch.from_numpy(m)
     kept = (edges.verdict == "keep").to_numpy() if "verdict" in edges.columns else np.ones(len(edges), bool)
     attr = np.stack([np.nan_to_num(edges.confidence.to_numpy(dtype=float), nan=0.0),
                      edges.confidence.notna().to_numpy(dtype=float),
@@ -62,7 +78,8 @@ def to_pyg(nodes, edges, path):
         et = (s, p, o)
         data[et].edge_index = torch.tensor(np.stack([src, dst]), dtype=torch.long)
         data[et].edge_attr = torch.from_numpy(attr[edges.index.get_indexer(g.index)])
-    torch.save({"data": data, "node_ids": node_ids, "edge_attr_columns": EDGE_ATTR}, path)
+    torch.save({"data": data, "node_ids": node_ids, "edge_attr_columns": EDGE_ATTR,
+                "node_feature_names": sorted(features or {})}, path)
     return data
 
 

@@ -64,16 +64,36 @@ if __name__ == "__main__":
     ap.add_argument("graph"); ap.add_argument("out")
     ap.add_argument("--targets", nargs="+"); ap.add_argument("--sample", type=int, help="re-check N random targets")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--perturb", type=int, default=0, help="self-test: first damage the stored snapshot (drop N edges, shift N scores, "
+                    "add N invented edges for the chosen targets) and check that the update finds exactly those changes")
     a = ap.parse_args()
     nodes, edges = pd.read_parquet(f"{a.graph}.nodes.parquet"), pd.read_parquet(f"{a.graph}.edges.parquet")
     names = a.targets or [i.replace("UniProtKB:", "") for i in random.Random(a.seed).sample(
         sorted(set(edges.subject[edges.evidence == "pharos:go"])), a.sample)]
     fresh = [t for t in (fetch_target(x, refresh=True) for x in names) if t]
     tids = {f"UniProtKB:{t['uniprot']}" for t in fresh}
+    planted = {}
+    if a.perturb:
+        rng = np.random.default_rng(a.seed)
+        own = np.flatnonzero(owned_by(edges, tids).to_numpy())
+        pick = rng.choice(own, size=3 * a.perturb, replace=False)
+        drop, shift, fake = pick[:a.perturb], pick[a.perturb:2 * a.perturb], pick[2 * a.perturb:]
+        scored = edges.confidence.iloc[shift].notna().to_numpy()
+        edges = edges.copy()
+        edges.iloc[shift[scored], edges.columns.get_loc("confidence")] += 0.5      # a re-score the update must notice
+        edges.iloc[fake, edges.columns.get_loc("object")] = [f"FAKE:{i}" for i in range(len(fake))]   # an edge Pharos does not have
+        planted = {"dropped": edges.iloc[drop][KEY].to_dict("records"), "n_shifted": int(scored.sum()), "n_fake": len(fake)}
+        edges = edges.drop(edges.index[drop])
     fn, fe = to_kg(fresh)
     n2, e2, delta = apply_update(nodes, edges, fn, fe, tids)
     n2.to_parquet(f"{a.out}.nodes.parquet"); e2.to_parquet(f"{a.out}.edges.parquet")
     rep = {"targets_checked": len(fresh), "summary": summarize(delta),
            "examples": {k: v.head(5)[KEY].to_dict("records") for k, v in delta.items()}}
+    if planted:
+        got = {k: len(v) for k, v in delta.items()}
+        rep["selftest"] = {"planted": {"missing_from_snapshot": len(planted["dropped"]), "rescored": planted["n_shifted"], "not_in_pharos": planted["n_fake"]},
+                           "detected": {"added": got["added"], "rescored": got["rescored"], "removed": got["removed"]}}
     json.dump(rep, open(f"{a.out}.delta.json", "w"), indent=1, default=str)
     print(json.dumps(rep["summary"], indent=1))
+    if planted:
+        print(json.dumps(rep["selftest"], indent=1))

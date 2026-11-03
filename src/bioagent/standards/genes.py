@@ -15,11 +15,11 @@ import pandas as pd
 
 def uniprot_to_gene(src_dir):
     """DataFrame uniprot, ensembl, symbol (Swiss-Prot proteins only; first gene when several map)."""
-    tg = pd.concat(pd.read_parquet(f, columns=["id", "approvedSymbol", "proteinIds"])
+    tg = pd.concat(pd.read_parquet(f, columns=["id", "approvedSymbol", "proteinIds", "biotype"])
                    for f in glob.glob(f"{src_dir}/opentargets_26.09/target/*.parquet"))
-    rows = [(p["id"], ens, sym) for ens, sym, pids in zip(tg.id, tg.approvedSymbol, tg.proteinIds)
+    rows = [(p["id"], ens, sym, bio) for ens, sym, bio, pids in zip(tg.id, tg.approvedSymbol, tg.biotype, tg.proteinIds)
             for p in (pids if pids is not None else []) if p["source"] == "uniprot_swissprot"]
-    return pd.DataFrame(rows, columns=["uniprot", "ensembl", "symbol"]).drop_duplicates("uniprot")
+    return pd.DataFrame(rows, columns=["uniprot", "ensembl", "symbol", "biotype"]).drop_duplicates("uniprot")
 
 
 def add_genes(nodes, edges, mapping):
@@ -27,7 +27,8 @@ def add_genes(nodes, edges, mapping):
     m = mapping.assign(pid="UniProtKB:" + mapping.uniprot, gid="ENSEMBL:" + mapping.ensembl)
     m = m[m.pid.isin(set(nodes.id))]
     gene_of = dict(zip(m.pid, m.gid))
-    gnodes = pd.DataFrame({"id": m.gid, "category": "biolink:Gene", "name": m.symbol, "source": "opentargets"}).drop_duplicates("id")
+    gnodes = pd.DataFrame({"id": m.gid, "category": "biolink:Gene", "name": m.symbol, "source": "opentargets",
+                           **({"biotype": m.biotype} if "biotype" in m.columns else {})}).drop_duplicates("id")
     ts, template = edges.timestamp.iloc[0], edges.iloc[0]
     link = pd.DataFrame({"subject": m.gid, "predicate": "biolink:has_gene_product", "object": m.pid, "source": "opentargets",
                          "evidence": "opentargets:target_protein_mapping", "confidence": float("nan"), "timestamp": ts,

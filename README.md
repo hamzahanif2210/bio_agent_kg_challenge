@@ -107,7 +107,7 @@ d["node_ids"]["Protein"][0]       # CURIE of node 0 of that type
 
 GO links not among UniProt's annotations or their parent terms are kept at low confidence (0.45, rule `go_unsupported`, 68,198 edges, flagged `needs_review`): eight blind LLM reviewers rated most of them plausible, so absence from UniProt is weak evidence only.
 
-Final graph: 3,089,014 edges, of which 2,901,057 are kept and 187,957 pruned. About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
+Final graph: 3,089,014 edges, of which 2,897,292 are kept and 191,722 pruned. About 30,000 weak disease links with 1 to 9 co-mentions were not judged; they keep the rule-based verdict and are flagged `needs_review`. The numeric priors are heuristics, not calibrated against the organizers' gold set. Every verdict carries `rule`, `reason` and `verdict_confidence`.
 
 ## Approach
 

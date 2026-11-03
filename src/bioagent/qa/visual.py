@@ -1,11 +1,12 @@
 """Interactive picture of an answer: a self-contained HTML page (open it in any browser). Nodes are coloured by class, edges by
 verdict (green keep, red dashed prune); click an edge to see its lineage: source, evidence, scores, verdict and reason.
-The page loads the vis-network library from cdnjs, so it needs internet to draw.
+The vis-network library (v9.1.9, Apache-2.0 / MIT, see assets/NOTICE) is embedded in the page, so it draws offline.
 """
 import html
 import json
+import os
 
-VIS = "https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"
+VIS_JS = os.path.join(os.path.dirname(__file__), "assets", "vis-network.min.js")
 COLORS = {"Protein": "#4e79a7", "Disease": "#e15759", "SmallMolecule": "#76b7b2", "Drug": "#76b7b2", "Gene": "#59a14f",
           "BiologicalProcess": "#edc948", "MolecularActivity": "#b07aa1", "CellularComponent": "#ff9da7"}
 
@@ -37,7 +38,7 @@ def to_html(edge_rows, nodes, title, path):
 h1{{font-size:1rem;margin:.6rem 1rem}}#g{{flex:1;border-top:1px solid #ccc}}#d{{padding:.6rem 1rem;border-top:1px solid #ccc;min-height:6rem;font-size:.9rem}}
 td{{padding:0 .8rem 0 0;vertical-align:top}}</style>
 <h1>{html.escape(title)}</h1><div id="g"></div><div id="d">Click an edge to see where it comes from and why it is kept or pruned.</div>
-<script src="{VIS}"></script>
+<script>{open(VIS_JS, encoding="utf-8").read()}</script>
 <script>
 const nodes=new vis.DataSet({json.dumps(vn)}), edges=new vis.DataSet({json.dumps(ve)}.map((e,i)=>({{...e,id:i}})));
 const net=new vis.Network(document.getElementById('g'),{{nodes,edges}},{{physics:{{stabilization:true}},edges:{{font:{{size:9}},smooth:true}},nodes:{{shape:'dot',size:14,font:{{size:12}}}}}});

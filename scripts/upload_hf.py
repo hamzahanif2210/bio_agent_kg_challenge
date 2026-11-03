@@ -31,5 +31,5 @@ Underlying sources (Pharos, Open Targets, UniProt, GO, MONDO, STRING, BioPlex, R
 check them before redistributing. Verdicts are heuristic and partly LLM-judged: see the write-up in the code repository.
 """
 api.upload_file(path_or_fileobj=card.encode(), path_in_repo="README.md", repo_id=a.repo, repo_type="dataset")
-api.upload_large_folder(repo_id=a.repo, repo_type="dataset", folder_path=a.dir)
+api.upload_folder(repo_id=a.repo, repo_type="dataset", folder_path=a.dir, commit_message="Upload full graphs")
 print("uploaded to", a.repo, "(private)")
