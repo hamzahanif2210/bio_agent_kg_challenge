@@ -1,14 +1,14 @@
-"""Upload the full graphs (exports/) to a PRIVATE Hugging Face dataset repo. The token is read from a file, never printed.
+"""Upload the full graphs (exports/) to a Hugging Face dataset repo. The token is read from a file, never printed.
 
-  python scripts/upload_hf.py [--repo hamzahanif/bio-agent-kg] [--token-file /project/rpp-nahee/hamza95/.h5_token]
+  python scripts/upload_hf.py [--repo hamzahanif/bioagent-kg-pharos] [--token-file /project/rpp-nahee/hamza95/.h5_token]
 
-Makes the repo private if it does not exist (it never changes visibility of an existing repo).
+The published dataset is public: https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos (new repos are created private; this never changes an existing repo's visibility).
 """
 import argparse, json
 from huggingface_hub import HfApi
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--repo", default="hamzahanif/bio-agent-kg"); ap.add_argument("--token-file", default="/project/rpp-nahee/hamza95/.h5_token")
+ap.add_argument("--repo", default="hamzahanif/bioagent-kg-pharos"); ap.add_argument("--token-file", default="/project/rpp-nahee/hamza95/.h5_token")
 ap.add_argument("--dir", default="exports"); ap.add_argument("--summary", default="data/processed/pharos_pruned_v3.summary.json")
 a = ap.parse_args()
 api = HfApi(token=open(a.token_file).read().strip())
@@ -32,4 +32,4 @@ check them before redistributing. Verdicts are heuristic and partly LLM-judged: 
 """
 api.upload_file(path_or_fileobj=card.encode(), path_in_repo="README.md", repo_id=a.repo, repo_type="dataset")
 api.upload_folder(repo_id=a.repo, repo_type="dataset", folder_path=a.dir, commit_message="Upload full graphs")
-print("uploaded to", a.repo, "(private)")
+print("uploaded to", a.repo)

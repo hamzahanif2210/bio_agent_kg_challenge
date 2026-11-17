@@ -18,6 +18,8 @@ Knowledge graphs are powerful in biology and hard to build and use. This project
 | **Standards** | Biolink 4.4.6 predicates, gene-protein split, OBO classes and IRIs on every node and edge | Real `kgx validate` 2.6.0 passes on the pruned graph |
 | **Link prediction** | Leakage-safe split, hard negatives, 3 seeds, 156 ablation runs | With text and sequence features the pruned graph beats plain Pharos on all four edge types; the gain comes from the features (see section 9) |
 
+**Full graphs (public):** [huggingface.co/datasets/hamzahanif/bioagent-kg-pharos](https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos). `whole.*` has all 3,089,014 edges with a keep/prune verdict, confidence, rule, reason and evidence; `pruned.*` has the 2,897,292 kept edges; `genes_*` split genes from proteins; `enriched.*` adds ontology hierarchies. Each comes as KGX TSV (`*.kgx/nodes.tsv`, `edges.tsv`) and PyTorch Geometric (`*.pyg.pt`). Plain CSVs: `edges_all.csv`, `edges_kept.csv`. Download: `huggingface-cli download hamzahanif/bioagent-kg-pharos --repo-type dataset --local-dir exports` (about 9 GB; add `--include "pruned.*"` for the pruned graph only).
+
 Judging criteria and where to look: **Usability** (40%) sections 2, 6, 7; **Accuracy and pruning** (30%) section 9 and [the paper](paper/main.pdf); **Explainability** (20%) `explain` and the edge pop-ups; **Standards** (10%) section 3.
 
 ## 2. Core interactive workbench modules
