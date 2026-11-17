@@ -1,64 +1,102 @@
-# Bio-Agent Knowledge Graph Construction Challenge
+# Bio-Agent Knowledge Graph
 
-An AI agent that autonomously builds an enriched, ontology-aligned knowledge graph (KG) from public Pharos data, optimized for link prediction.
+An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track). Licence: MIT. Paper: [paper/main.pdf](paper/main.pdf). Write-up: [docs/WRITEUP.md](docs/WRITEUP.md).
 
-## The challenge
+**Contents:** 1 Executive summary · 2 Interactive workbench · 3 Ontological standards · 4 Render and GitHub deployment · 5 NVIDIA Brev (NemoClaw, OpenClaw, Hermes, pi) · 6 Server API · 7 Local development · 8 The challenge · 9 Methods, results and reference · 10 Limits and honest caveats
 
-Knowledge graphs are powerful for biology but hard for most researchers to build and use. The organizers (Bio-Agent KG Construction Challenge, topic *Structured Data Integration & Link Prediction*) ask teams to build **AI agents that construct, maintain and query KGs autonomously**.
+## 1. Executive summary
 
-**Key question:** given a set of experimentally measured relationships, can an agent build a contextualized KG that **outperforms existing public KGs (e.g. Pharos) at predicting held-out links** with GNNs/GCNs?
+Knowledge graphs are powerful in biology and hard to build and use. This project gives a non-expert one place to **ingest, prune, ask, explain and maintain** a graph, and shows how much of it to trust.
 
-### What we must deliver
-
-An agent (or swarm of agents) that takes public datasets from [Pharos](https://pharos.nih.gov/about) and builds an enriched graph, pulling in disease, drug, gene, protein and ontology context from other public KGs and databases. The agent should run this loop:
-
-1. **Ingest:** combine heterogeneous sources into one graph.
-2. **Filter:** turn a plain-language research question into a graph query and return only the relevant subgraph.
-3. **Clean:** prune erroneous or contextually wrong links (hallucinations), e.g. by re-weighting edge confidence with literature or a GNN.
-4. **Limit:** keep the queryable graph a manageable size (the organizers call this probably unnecessary).
-5. **Maintain:** update automatically as new literature or data appears (the organizers hope this is "not too complicated").
-
-### How it is judged
-
-The agent builds the graph; GNN/GCN/embedding models are then run to predict held-out edges, and performance is compared with the same ML on the existing Pharos graph.
-
-| Criterion | Weight | What it asks |
+| Challenge goal | What we built | Result |
 |---|---|---|
-| Usability | 40% | Can a non-KG expert use the agent? Does it make the value of KGs obvious, including multi-hop questions? |
-| Accuracy and pruning | 30% | How well does it remove erroneous or irrelevant data? |
-| Explainability | 20% | Can it trace the lineage of any edge (why does A connect to B)? |
-| Adherence to standards | 10% | Nodes and edges map to real ontology classes and properties (Biolink, OBO URIs); few, specific classes. |
+| **Ingest** | Tool-calling agent harness over the live Pharos API (LLM cache, step and token caps, leak guard) | 397,636 nodes, 3,091,048 edges, per-edge evidence |
+| **Clean / prune** | Rules, CRAPome contaminants, obsolete-term remap, PubMed co-mention tiers, an LLM judge, and a second-opinion check on rescued links | 3,089,014 edges: **2,897,292 kept, 191,722 pruned**; every verdict has a rule, reason and confidence |
+| **Filter and ask** | Plain-language question to the relevant subgraph, with an interactive picture (green kept, dashed red pruned) | Web page, CLI and JSON API |
+| **Explain** | "Why does A connect to B?": sources, evidence, verdict, and paths through shared neighbours | `explain` command and `/api/explain` |
+| **Maintain** | Re-fetch targets, report added, removed and re-scored edges | Self-test passes (20 added, 5 re-scored, 10 removed found); one live re-check of 400 random targets found no changes |
+| **Standards** | Biolink 4.4.6 predicates, gene-protein split, OBO classes and IRIs on every node and edge | Real `kgx validate` 2.6.0 passes on the pruned graph |
+| **Link prediction** | Leakage-safe split, hard negatives, 3 seeds, 156 ablation runs | With text and sequence features the pruned graph beats plain Pharos on all four edge types; the gain comes from the features, not from pruning (see section 10) |
 
-### Key dates
+Judging criteria and where to look: **Usability** (40%) sections 2, 6, 7; **Accuracy and pruning** (30%) section 9 and [the paper](paper/main.pdf); **Explainability** (20%) `explain` and the edge pop-ups; **Standards** (10%) section 3.
 
-- Kickoff Oct 6, 2026 (done)
-- **Progress report by email: Oct 27, 2026**
-- **Challenge ends: Nov 17, 2026**
-- Judging Nov 17 to Dec 8; results Dec 15
-- Prize (open-source track): USD 5,000 AWS credits
+## 2. Core interactive workbench modules
 
-**New to the project? Start with [docs/what_we_need_to_do.md](docs/what_we_need_to_do.md)**, a plain-language guide to the goal, the scoring, the work packages and the calendar.
+| Module | What it does | Where |
+|---|---|---|
+| Web workbench | Type a name or a comma-separated pair; get the answer text plus an interactive picture. Click an edge to see its source, evidence, verdict and reason. Works offline (the graph library is bundled). | `python -m bioagent serve` (`qa/serve.py`, `qa/visual.py`) |
+| Ask | Neighbours of a node, or the connection between two. With an LLM key, full sentences are accepted; the LLM only picks out the names, all facts come from the graph. | `python -m bioagent ask` (`qa/ask.py`) |
+| Explain | Lineage of any link: source, evidence, method, timestamp, verdict, rule, reason, and up to five paths through shared neighbours (two hops) | `python -m bioagent explain A B` (`provenance/explain.py`) |
+| Prune | Tiered pipeline described in section 9, re-runnable with one Slurm command | `clean/`, `scripts/run_pipeline.sbatch` |
+| Maintain | Re-fetch and diff: added, removed, re-scored | `ingest/update.py`, `scripts/update.sbatch` |
+| Export | KGX TSV and PyTorch Geometric, for the whole, pruned and enriched graphs | `export/`, `python -m bioagent export` |
+| Review tools | Score pruning against any gold list (`scripts/score_gold.py`), plain CSV edge lists (`scripts/export_plain.py`), silver-standard checks (`scripts/silver_eval.py`, `scripts/silver_go.py`) | `scripts/` |
+| Agent skill | One `SKILL.md` that lets an agent harness call all of the above | `agents/bioagent-kg/` (section 5) |
 
-## Our progress (as of 2026-10-30)
+## 3. Adherence to ontological standards (OBO Foundry and Monarch Biolink)
 
-| Area | Status |
-|---|---|
-| Full Pharos graph from the live API, with per-edge evidence | Done: 397,636 nodes, 3,091,048 edges |
-| Leakage-safe evaluation (unordered-pair split, hard negatives, shared test set) | Done (`eval/`) |
-| Baselines (GraphSAGE, 3 seeds, 4 edge types) on plain Pharos and on the pruned graph | Done; pruning does not change link prediction (table below) |
-| **Ingest** agent harness, real LLM runs on NRP | Done (`ingest/`); Pharos is the only tool so far |
-| **Clean**, v1: rule-based pruning with Open Targets, GO/MONDO, UniProt, STRING scores | Done (`clean/prune.py`) |
-| **Clean**, v2: PubMed co-mention tiers and an LLM judge with retrieved evidence | Done (`clean/pubmed_tiers.py`, `clean/apply_judge.py`); judge covers the 5,000 highest-evidence uncertain edges |
-| **Clean**: CRAPome contaminant rule for AP-MS interactions | Done; prunes 4,574 BioPlex-only edges |
-| **Filter**: plain-language question to subgraph, with an interactive picture | Done (`qa/`) |
-| **Maintain**: re-fetch targets, report added / removed / re-scored edges | Done as a prototype (`ingest/update.py`), tested on a sample |
-| Explanations: why does A connect to B, with sources and verdicts | Done (`provenance/explain.py`) |
-| Standards: Biolink predicates checked against model 4.4.6; gene-protein split | Done (`standards/`); our own checker, not `kgx validate` |
-| Exports: KGX TSV and PyTorch Geometric, whole and pruned | Done (`export/`) |
-| Enriched graph (extra sources) beating the baseline | **Not yet** |
-| Answers from the organizers | **Not yet asked** |
+- **Biolink 4.4.6.** Nodes use Biolink classes (`biolink:Protein`, `Gene`, `Disease`, `SmallMolecule`, `BiologicalProcess`, ...). Edges use specific Biolink predicates (`physically_interacts_with`, `actively_involved_in`, `capable_of`, `located_in`, `gene_associated_with_condition`, with `associated_with` and `related_to` as the general fall-backs) rather than one generic link; `standards/biolink.py` checks every predicate and its subject and object classes against the model.
+- **Gene and protein are separate.** A gene-disease link is attached to the gene node, not the protein (`standards/genes.py`). Without the split the graph mixes the two, which Biolink does not allow.
+- **OBO terms and IRIs.** `ontology_class`, `ontology_class_iri` and `iri` columns map each node class to an OBO term (protein `PR:000000001`, protein-coding gene `SO:0001217`, disease `MONDO:0000001`, GO branches, ...) and each CURIE to a resolvable IRI. A predicate with no declared OBO property stays empty: we do not invent mappings (`standards/ontology.py`).
+- **Identifiers.** UniProtKB, MONDO, GO, ChEMBL and PHAROS CURIEs. Obsolete GO and MONDO terms are remapped to their replacement, the old id kept in `original_object`.
+- **Real validator.** `kgx validate` 2.6.0 (run in a container, `scripts/kgx_container.sbatch`) first flagged one problem: Biolink's context has `PHAROS` but not `PHAROS.LIGAND`. The export now writes `PHAROS:`; the pruned graph then validates with no errors (`runs/kgx_validate_pruned.txt`).
+- **Provenance on every edge:** `source`, `evidence`, `confidence`, `method`, `timestamp`, plus `verdict`, `rule`, `reason`.
 
-## Quick start (no graph expertise needed)
+## 4. Render blueprint (`render.yaml`) and GitHub deployment
+
+The repository includes a [Dockerfile](Dockerfile) and a [Render Blueprint](render.yaml) that host the web workbench and JSON API on the bundled **sample graph** (about 12,000 edges; 10 well-known cancer proteins and their neighbours).
+
+1. Push this repository to GitHub (a public fork or your own copy).
+2. In Render choose **New + > Blueprint**, select the repository; Render reads `render.yaml` and builds the Dockerfile.
+3. Optional, for full-sentence questions: in the Render dashboard set `LLM_BASE_URL` and `LLM_API_KEY`. Keys are never stored in the repository.
+4. Open the service URL; `/healthz` is the health check.
+
+The service binds `0.0.0.0` only because `HOST=0.0.0.0` is set in the blueprint; the default everywhere else is `127.0.0.1`. The free plan is enough for the sample graph. The full graph (about 3 million edges) needs several GB of memory, so host it on a larger plan or on Brev (section 5), with the exports downloaded from the project's Hugging Face dataset. Render has no authentication in front of this service: do not put private data in it.
+
+## 5. Compiling to NVIDIA Brev (NemoClaw / OpenClaw / Nous Hermes) and the pi harness
+
+The agent is packaged as one [Agent Skill](agents/bioagent-kg/SKILL.md): a folder with `SKILL.md` (YAML `name` and `description`, then instructions). pi, OpenClaw (and therefore NemoClaw, which runs OpenClaw in a sandbox) and Hermes Agent read this same format, so "compiling" means copying the folder to where each one looks:
+
+```bash
+python scripts/compile_agent.py pi --user  # ~/.agents/skills/ (project .agents/skills/ needs /trust)        ([pi](https://github.com/earendil-works/pi))
+python scripts/compile_agent.py openclaw   # skills/                (NemoClaw: use this one)
+python scripts/compile_agent.py nemoclaw   # same folder as openclaw
+python scripts/compile_agent.py hermes     # ~/.hermes/skills/research/
+# add --user to install for your whole account instead of this repository
+```
+
+**On a Brev instance** (Ubuntu): `bash deploy/brev/setup.sh nemoclaw` (or `openclaw`, `hermes`, `pi`). It installs the slim requirements, starts the web service on port 8000, installs the skill, and prints the agent's own next step:
+
+| Harness | Install the agent | Then |
+|---|---|---|
+| NemoClaw | `curl -fsSL https://nvidia.com/nemoclaw.sh \| bash`, then `nemoclaw onboard` | `nemoclaw <name> connect`, then `openclaw tui` |
+| OpenClaw | see the OpenClaw docs, then `openclaw onboard` | skills reload automatically when `SKILL.md` changes |
+| Hermes Agent | [NousResearch/hermes-agent](https://github.com/nousresearch/hermes-agent) | start a new session; `/skills` lists it |
+| pi | `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (Node 22.19+) | run `pi` in the repo, `/login`, then `/skill:bioagent-kg BRCA1` |
+
+**Tested with pi (2026-11-16):** pi 0.x from npm on Node 22 with the NRP gpt-oss model, using a `models.json` custom provider and `pi --skill agents/bioagent-kg --mode json "/skill:bioagent-kg ..."`. It ran our `explain` command and answered the EGFR to non-small cell lung carcinoma question correctly (one direct link, keep, 0.9, rule `disease_open_targets`). Two things to know: (1) pi skips a project's `.agents/skills/` until you trust the folder (`/trust`), which a non-interactive run cannot do, so use `--user` or `--skill <path>`; (2) in that run the model first tried `pip install` and read a demo file before finding the command, so the skill works but a small model is not always efficient. Run non-interactive pi with stdin closed (`< /dev/null`), or it waits for input.
+
+Notes: the agent's model key is entered in each harness's own login step and never goes through this repository. pi has no built-in permission system, so run it in a container or sandbox. The skill tells the agent to answer only from the graph tools. We tested the skill file format, the install script logic and the JSON endpoints (`tests/test_agent_and_api.py`); we have **not** run the NemoClaw, OpenClaw or Hermes installers, nor any of them on a Brev instance, so treat those steps as documented in each project's own guide, not as verified here.
+
+## 6. Server API endpoints (`src/bioagent/qa/serve.py`)
+
+Read-only, JSON, no authentication; the server listens on `127.0.0.1:8000` unless `--host` or `HOST` says otherwise (`--port` or `PORT` for the port).
+
+| Method and path | Parameters | Returns |
+|---|---|---|
+| `GET /` | `q` (names, comma-separated, or a sentence if an LLM is set) | HTML page with the answer and picture |
+| `GET /pic/<n>` | | the interactive picture made for a page request |
+| `GET /healthz` | | `{"ok": true}` |
+| `GET /api/stats` | | node, edge, kept and pruned counts |
+| `GET /api/node` | `q` (id or exact name) | the node record |
+| `GET /api/ask` | `q` | `{entities, answer, edges[]}`: best-supported kept neighbours (or the connection) with verdicts |
+| `GET /api/explain` | `a`, `b` | direct edges and shared-neighbour paths between A and B with source, evidence, verdict, rule and reason |
+
+Errors come back as `{"error": "..."}` with status 400 or 404. Example: `curl 'http://127.0.0.1:8000/api/explain?a=EGFR&b=non-small%20cell%20lung%20carcinoma'`.
+
+## 7. Local development
+
+### Quick start (no graph expertise needed)
 
 Everything below runs from the repository root. The repository includes a small sample graph (`sample/`: 10 well-known cancer proteins and their neighbours, about 12,000 edges), so this works straight after cloning. The full graphs are downloaded separately (see "Full graphs").
 
@@ -95,7 +133,52 @@ print(data.edge_types)            # e.g. ('Protein', 'physically_interacts_with'
 d["node_ids"]["Protein"][0]       # CURIE of node 0 of that type
 ```
 
-## How the graph was pruned
+
+### Tests, setup and layout
+
+Tests are plain Python scripts (no pytest needed): `for t in tests/test_*.py; do python $t || echo FAIL $t; done`. Setup, repository layout, the graph format and the evaluation protocol are described in the sections below ("Repository layout", "Graph format", "Setup", "Evaluation protocol"). On the Alliance cluster, heavy steps run as Slurm jobs (`scripts/*.sbatch`), not on the login node.
+
+## 8. The challenge
+
+Knowledge graphs are powerful for biology but hard for most researchers to build and use. The organizers (Bio-Agent KG Construction Challenge, topic *Structured Data Integration & Link Prediction*) ask teams to build **AI agents that construct, maintain and query KGs autonomously**.
+
+**Key question:** given a set of experimentally measured relationships, can an agent build a contextualized KG that **outperforms existing public KGs (e.g. Pharos) at predicting held-out links** with GNNs/GCNs?
+
+### What we must deliver
+
+An agent (or swarm of agents) that takes public datasets from [Pharos](https://pharos.nih.gov/about) and builds an enriched graph, pulling in disease, drug, gene, protein and ontology context from other public KGs and databases. The agent should run this loop:
+
+1. **Ingest:** combine heterogeneous sources into one graph.
+2. **Filter:** turn a plain-language research question into a graph query and return only the relevant subgraph.
+3. **Clean:** prune erroneous or contextually wrong links (hallucinations), e.g. by re-weighting edge confidence with literature or a GNN.
+4. **Limit:** keep the queryable graph a manageable size (the organizers call this probably unnecessary).
+5. **Maintain:** update automatically as new literature or data appears (the organizers hope this is "not too complicated").
+
+### How it is judged
+
+The agent builds the graph; GNN/GCN/embedding models are then run to predict held-out edges, and performance is compared with the same ML on the existing Pharos graph.
+
+| Criterion | Weight | What it asks |
+|---|---|---|
+| Usability | 40% | Can a non-KG expert use the agent? Does it make the value of KGs obvious, including multi-hop questions? |
+| Accuracy and pruning | 30% | How well does it remove erroneous or irrelevant data? |
+| Explainability | 20% | Can it trace the lineage of any edge (why does A connect to B)? |
+| Adherence to standards | 10% | Nodes and edges map to real ontology classes and properties (Biolink, OBO URIs); few, specific classes. |
+
+### Key dates
+
+- Kickoff Oct 6, 2026 (done)
+- **Progress report by email: Oct 27, 2026**
+- **Challenge ends: Nov 17, 2026**
+- Judging Nov 17 to Dec 8; results Dec 15
+- Prize (open-source track): USD 5,000 AWS credits
+
+**New to the project? Start with [docs/what_we_need_to_do.md](docs/what_we_need_to_do.md)**, a plain-language guide to the goal, the scoring, the work packages and the calendar.
+
+
+## 9. Methods, results and reference
+
+### How the graph was pruned
 
 | Step | What it does | Edges decided |
 |---|---|---|
@@ -313,3 +396,4 @@ Check each source for overlap with held-out edges and for redistribution terms b
 ## License
 
 MIT, see [LICENSE](LICENSE). Downloaded third-party data (Pharos, Open Targets, UniProt, GO, MONDO, Monarch, OptimusKG) keeps its own license and is not part of this repository.
+

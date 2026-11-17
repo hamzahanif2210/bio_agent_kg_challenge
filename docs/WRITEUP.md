@@ -27,6 +27,7 @@ The LLM never creates edges. Every edge traces to a source record.
 
 - **Standards:** an in-house checker validates predicate, domain and range against Biolink 4.4.6 (0 problems on the gene-split graph). Real `kgx validate` 2.6.0 (container) first flagged only the `PHAROS.LIGAND` prefix; after the export was changed to `PHAROS` it reports no errors on the pruned graph.
 - **Blind LLM review:** eight models rated a 64-edge sample and a 150-edge GO sample. Keeps and the no-literature and CRAPome prunes were well supported. The models lean toward "plausible", so this is a smoke test, not an accuracy figure.
+- **GOA check (partly circular, UniProt's GO comes from GOA):** only 2.6% of the 68,198 `go_unsupported` links (1,776; 438 experimental) and 0.3% of the pruned obsolete-GO links are in GOA, so the demotion is not contradicted. It says nothing about the kept links. The 1,776 could be raised in confidence. Script: `scripts/silver_go.py`, output `runs/silver_go.json`.
 - **Link prediction:** Pruning alone shows no difference beyond seed noise. Adding node features (text, sequence composition) and a GCN or MLP decoder beats plain Pharos on all four targets (e.g. PPI 0.710 to 0.867, GO 0.591 to 0.705), but plain Pharos with the same features is close, so the gain is from features, not pruning. Shipped as `exports/enriched.*`. The case for the submission is cleaner, standards-valid, explained data.
 
 ## Known limits (state these plainly)
@@ -42,3 +43,11 @@ The LLM never creates edges. Every edge traces to a source record.
 ## For the organizers
 
 Open question: what delivery format and gold-set comparison they will use, so we can report a real accuracy number.
+
+## Live maintenance check (2026-11-16)
+
+`scripts/update.sbatch 400` re-fetched 400 random Pharos targets and compared them with the stored graph: no edges were added, removed or re-scored. This is the expected result if Pharos has not changed for those targets; together with the perturbation self-test (20 added, 5 re-scored and 10 removed edges all found) it shows the loop runs end to end and does not invent changes. It does not show that a real Pharos release would be handled.
+
+## Deployment and agent packaging
+
+The web workbench has a JSON API, a Dockerfile and a Render blueprint (sample graph). The query tools are packaged as one Agent Skill (`agents/bioagent-kg/SKILL.md`) installable for pi, OpenClaw/NemoClaw and Hermes with `scripts/compile_agent.py`, and `deploy/brev/setup.sh` prepares a Brev instance. The file format, installer and API are tested; the third-party agent installers were not run here.

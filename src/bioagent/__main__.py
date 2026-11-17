@@ -29,7 +29,8 @@ def main(argv=None):
     x = sub.add_parser("explain", help="why does A connect to B? (sources, evidence, verdicts)")
     x.add_argument("a"); x.add_argument("b")
     v = sub.add_parser("serve", help="local web page: type names, get the answer and the picture")
-    v.add_argument("--port", type=int, default=8000)
+    v.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    v.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="use 0.0.0.0 only behind your own proxy (hosted deploys)")
     v.add_argument("--model", default=os.environ.get("LLM_MODEL", "gpt-oss")); v.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
     sub.add_parser("export", help="write KGX + PyTorch Geometric files to exports/")
     args = ap.parse_args(argv)
@@ -57,7 +58,7 @@ def main(argv=None):
         if args.base_url and os.environ.get("LLM_API_KEY"):
             from bioagent.ingest.harness import openai_llm
             llm = openai_llm(args.base_url, os.environ["LLM_API_KEY"])
-        serve(args.graph, args.port, llm, args.model)
+        serve(args.graph, args.port, llm, args.model, args.host)
     elif args.cmd == "explain":
         from bioagent.provenance.explain import explain, format_explanation
         print(format_explanation(explain(args.graph, args.a, args.b)))

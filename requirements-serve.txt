@@ -1,0 +1,7 @@
+# Slim set for the web interface and agent tools on the sample graph (no torch / GNN training).
+numpy
+pandas
+pyarrow
+requests
+pyyaml
+networkx

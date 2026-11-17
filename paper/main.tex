@@ -5,7 +5,7 @@
 \hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
 \setlist{nosep}
 \title{Pruning a Pharos knowledge graph with explained, source-checked verdicts\\\large Bio-Agent Knowledge Graph Construction Challenge, open-source track}
-\author{Hamza Hanif}
+\author{Hamza Hanif, Rizwan Qureshi, Hara Moraitaki}
 \date{\today}
 \begin{document}
 \maketitle
@@ -82,7 +82,10 @@ Pruned + features, MLP decoder & 0.557 & 0.705 & 0.659 & 0.867\\\bottomrule
 \end{table}
 
 \section{Maintenance and pruning accuracy}
-A self-test dropped 10 edges, shifted 5 scores and invented 10 edges; the update step reported all of them (20 added, 5 re-scored, 10 removed; the 10 invented edges replaced real ones). The real re-check is scheduled. A silver-standard comparison against Open Targets curated sources and IntAct/SIGNOR was inconclusive: support was under 1\% for disease links in every group, and IntAct imports BioPlex, so the interaction test is circular. We therefore make no accuracy claim.
+A self-test dropped 10 edges, shifted 5 scores and invented 10 edges; the update step reported all of them (20 added, 5 re-scored, 10 removed; the 10 invented edges replaced real ones). A real re-check of 400 randomly chosen Pharos targets (2026-11-16) found no additions, removals or re-scorings, which is what we expect if Pharos has not changed for them; it shows the loop runs end to end, not that a new Pharos release would be handled. A silver-standard comparison against Open Targets curated sources and IntAct/SIGNOR was inconclusive: support was under 1\% for disease links in every group, and IntAct imports BioPlex, so the interaction test is circular. We therefore make no accuracy claim.
+
+We also compared GO verdicts with the GOA human file. This is only partly independent, because UniProt's GO lines come from GOA: 100\% of the edges kept as directly or inherited UniProt-annotated are supported, as expected, and tell us nothing. The informative groups are the ones the rules doubted. Of the 68,198 GO links absent from UniProt (kept at 0.45), only 2.6\% (1,776; 438 with experimental evidence) are supported by GOA, so GOA does not contradict that demotion; of the 6,340 links on obsolete GO terms that we pruned, 0.3\% are supported. This shows the doubtful group is not hiding well-supported links; it does not show that the kept links are correct.
+
 
 \section{Limits}\label{sec:limits}
 \begin{itemize}
@@ -90,7 +93,7 @@ A self-test dropped 10 edges, shifted 5 scores and invented 10 edges; the update
 \item About 30,000 weak disease links were never judged.
 \item 504 disease edges on obsolete MONDO terms with no replacement stay pruned; only 188 have one suggested current term, and a suggestion is not a rename.
 \item Article counts are co-mentions of names, not statements of a relation.
-\item The maintenance mode was tested only on planted changes.
+\item The maintenance mode was tested on planted changes and on one live re-check that found no changes; it has not seen a real Pharos release.
 \item The interface pictures embed the drawing library (offline) and were checked by automated tests, not by eye in a browser.
 \item Our Biolink checker is our own implementation; the real kgx result is given above.
 \end{itemize}

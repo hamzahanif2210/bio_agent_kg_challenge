@@ -1,0 +1,17 @@
+# Render Blueprint: serves the sample graph (about 12,000 edges) from this repository.
+# The full graph is about 3 million edges and needs several GB of memory; use a larger plan and
+# fetch the exports from the Hugging Face dataset (see README) if you want it hosted.
+services:
+  - type: web
+    name: bioagent-kg
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      # Optional, for full-sentence questions. Set in the Render dashboard, never in this file:
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
