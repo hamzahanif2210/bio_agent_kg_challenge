@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bio-Agent Knowledge Graph | Team Random Agents</title>
+<meta name="description" content="An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from Pharos.">
+<style>
+:root{--bg:#fbfbf9;--fg:#1c1f23;--mut:#5b6470;--card:#fff;--line:#e3e5e8;--acc:#1f7a4d;--acc2:#b3261e;--code:#f1f2f0}
+@media (prefers-color-scheme:dark){:root{--bg:#14171a;--fg:#e8eaed;--mut:#9aa3ad;--card:#1b1f23;--line:#2c3238;--acc:#4cc38a;--acc2:#ff8a80;--code:#20262b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:62rem;margin:0 auto;padding:0 1.2rem}
+header{padding:3.2rem 0 1.6rem}
+h1{font-size:clamp(1.9rem,4.5vw,2.8rem);line-height:1.15;margin:.2rem 0 .8rem;letter-spacing:-.02em}
+.lead{font-size:1.15rem;color:var(--mut);max-width:44rem;margin:0 0 1.2rem}
+.team{font-size:.95rem;color:var(--mut)}.team b{color:var(--fg)}
+nav{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.2rem 0 0}
+nav a{padding:.5rem .9rem;border:1px solid var(--line);border-radius:.5rem;background:var(--card);color:var(--fg);text-decoration:none;font-size:.92rem}
+nav a:hover{border-color:var(--acc)}nav a.p{background:var(--acc);border-color:var(--acc);color:#fff}
+section{padding:1.6rem 0;border-top:1px solid var(--line)}
+h2{font-size:1.35rem;margin:0 0 .9rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:.7rem;padding:.9rem 1rem}
+.stat b{display:block;font-size:1.55rem;letter-spacing:-.02em}.stat span{color:var(--mut);font-size:.88rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:.7rem;padding:1rem 1.1rem}
+.card h3{margin:0 0 .35rem;font-size:1.02rem}.card p{margin:0;color:var(--mut);font-size:.93rem}
+pre{background:var(--code);border-radius:.6rem;padding:.9rem 1rem;overflow-x:auto;font-size:.85rem;line-height:1.5}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.legend i{display:inline-block;width:1.6rem;border-top:3px solid var(--acc);vertical-align:middle;margin:0 .3rem 0 .6rem}
+.legend i.p{border-top:3px dashed var(--acc2)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}td,th{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+.tw{overflow-x:auto}
+footer{padding:1.6rem 0 3rem;color:var(--mut);font-size:.9rem;border-top:1px solid var(--line)}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="team">Team <b>Random Agents</b>: Dr. Rizwan Qureshi, Dr. Hamza Hanif, Hara Moraitaki</div>
+  <h1>Bio-Agent Knowledge Graph</h1>
+  <p class="lead">An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from Pharos, so a researcher can see not only what is connected but why, and how far to trust it.</p>
+  <nav>
+    <a class="p" href="demo/egfr_nsclc.html">Open the live demo</a>
+    <a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge">GitHub</a>
+    <a href="paper/main.pdf">Paper</a>
+    <a href="https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos">Full graphs</a>
+    <a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/docs/README.md">Methods and results</a>
+  </nav>
+</header>
+
+<section>
+  <div class="stats">
+    <div class="stat"><b>3,089,014</b><span>edges, each with a verdict, rule and reason</span></div>
+    <div class="stat"><b>2,897,292</b><span>kept</span></div>
+    <div class="stat"><b>191,722</b><span>pruned</span></div>
+    <div class="stat"><b>397,636</b><span>nodes</span></div>
+    <div class="stat"><b>kgx validate</b><span>passes on the pruned graph (Biolink 4.4.6)</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Try it in the browser</h2>
+  <p>Self-contained pages, no install. <span class="legend"><i></i>kept<i class="p"></i>pruned</span> Click any edge to see its source, evidence, verdict and reason. Drag the slider to see what a stricter or looser pruning cut-off would do.</p>
+  <div class="grid">
+    <div class="card"><h3><a href="demo/egfr_nsclc.html">EGFR and lung carcinoma</a></h3><p>How is EGFR connected to non-small cell lung carcinoma?</p></div>
+    <div class="card"><h3><a href="demo/egfr_nsclc_3hop.html">Three hops, strong edges</a></h3><p>The same question, paths of up to 3 hops, confidence 0.8 and above.</p></div>
+    <div class="card"><h3><a href="demo/brca1.html">BRCA1</a></h3><p>The best-supported kept neighbours of one protein.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><h3>Ingest</h3><p>A tool-calling agent over the live Pharos API, with a cache, step and token caps, and a guard that keeps held-out edges out.</p></div>
+    <div class="card"><h3>Prune</h3><p>Rules, CRAPome contaminants, obsolete-term remapping, PubMed co-mention tiers and an LLM judge. Every verdict has a rule, reason and confidence.</p></div>
+    <div class="card"><h3>Ask</h3><p>A name, a pair, or a full sentence. The LLM only picks out the names; every fact comes from the graph. Up to 5 hops, with filters on confidence and node type.</p></div>
+    <div class="card"><h3>Explain</h3><p>Why does A connect to B? Source, evidence, verdict, and paths through shared neighbours.</p></div>
+    <div class="card"><h3>Bring your own data</h3><p>Upload a CSV of your measurements. Each row gets a keep or prune verdict with a stated reason.</p></div>
+    <div class="card"><h3>Maintain</h3><p>Re-fetch targets and report what was added, removed or re-scored.</p></div>
+    <div class="card"><h3>Standards</h3><p>Biolink 4.4.6 predicates, genes split from proteins, OBO classes and IRIs on every node and edge.</p></div>
+    <div class="card"><h3>Runs in agent harnesses</h3><p>One Agent Skill, verified in NVIDIA NemoClaw sandboxes with OpenClaw and Hermes on Brev, and in pi.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Quick start</h2>
+<pre><code>git clone https://github.com/hamzahanif2210/bio_agent_kg_challenge && cd bio_agent_kg_challenge
+pip install -r requirements-serve.txt &amp;&amp; export PYTHONPATH=src
+python -m bioagent --graph sample/sample.whole serve            # web page at http://127.0.0.1:8000
+python -m bioagent --graph sample/sample.whole ask --entities EGFR "non-small cell lung carcinoma" --hops 3 --min-conf 0.8
+python -m bioagent --graph sample/sample.whole explain EGFR "non-small cell lung carcinoma"
+python -m bioagent --graph sample/sample.whole ingest-csv sample/example_measurements.csv --out mine</code></pre>
+</section>
+
+<section>
+  <h2>Where to look</h2>
+  <div class="tw"><table>
+    <tr><th>Judging criterion</th><th>Weight</th><th>See</th></tr>
+    <tr><td>Usability</td><td>40%</td><td><a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/src/bioagent/README.md">the package</a>, <a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/src/bioagent/qa/README.md">web workbench and API</a>, <a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/deploy/README.md">deployment</a></td></tr>
+    <tr><td>Accuracy and pruning</td><td>30%</td><td><a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/docs/README.md">methods and results</a>, <a href="paper/main.pdf">paper</a></td></tr>
+    <tr><td>Explainability</td><td>20%</td><td>the <code>explain</code> command and the edge pop-ups in the demos</td></tr>
+    <tr><td>Standards</td><td>10%</td><td><a href="https://github.com/hamzahanif2210/bio_agent_kg_challenge/blob/main/src/bioagent/standards/README.md">Biolink and OBO</a></td></tr>
+  </table></div>
+</section>
+
+<footer>MIT licence. Third-party data (Pharos, Open Targets, UniProt, GO, MONDO, Monarch, OptimusKG) keeps its own licence. Entry for the Bio-Agent Knowledge Graph Construction Challenge, open-source track.</footer>
+</div>
+</body>
+</html>
