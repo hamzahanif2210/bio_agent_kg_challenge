@@ -18,7 +18,18 @@ An AI agent that builds, prunes, explains and answers questions over a Biolink-a
 | **Standards** | Biolink 4.4.6 predicates, gene-protein split, OBO classes and IRIs on every node and edge | Real `kgx validate` 2.6.0 passes on the pruned graph |
 | **Link prediction** | Leakage-safe split, hard negatives, 3 seeds, 156 ablation runs | With text and sequence features the pruned graph beats plain Pharos on all four edge types; the gain comes from the features (see [docs](docs/README.md)) |
 
-Judging criteria and where to look: **Usability** (40%) [src/bioagent](src/bioagent/README.md) and [qa](src/bioagent/qa/README.md); **Accuracy and pruning** (30%) [docs](docs/README.md) and [the paper](paper/main.pdf); **Explainability** (20%) `explain` and the edge pop-ups; **Standards** (10%) [standards](src/bioagent/standards/README.md).
+## Agents and deployment
+
+The query tools (ask, explain, multi-hop, ingest-csv) are packaged as one [Agent Skill](agents/bioagent-kg/SKILL.md) that pi, OpenClaw, NemoClaw and Hermes Agent read. Nothing is rewritten per harness: installing it means copying one folder.
+
+| Where | How | Status |
+|---|---|---|
+| **NVIDIA Brev, NemoClaw + OpenClaw** | `bash deploy/brev/setup.sh nemoclaw`, then `bash deploy/brev/nemoclaw.sh openclaw` | Run on a fresh instance (4 vCPU, Nemotron 3.5 Super on NVIDIA endpoints); the agent answered the EGFR question correctly through the skill |
+| **NVIDIA Brev, NemoClaw + Hermes** | same, `bash deploy/brev/nemoclaw.sh hermes` | Same instance type; same correct answer through Hermes's API |
+| **pi** | `python scripts/compile_agent.py pi --user` | Run with a hosted model; answered correctly |
+| **Render** | [render.yaml](render.yaml) + [Dockerfile](Dockerfile) | Web workbench and JSON API on the sample graph |
+
+`deploy/brev/nemoclaw.sh` goes from a fresh Brev instance to a sandboxed agent in one command: it installs NemoClaw, creates the sandbox, allows only PyPI through its network policy, installs the skill and asks a test question. Your model key stays in an environment variable and never enters the repository. Details, logs and the fixes the stock Brev image needs: [deploy](deploy/README.md) and [agents](agents/README.md).
 
 ## Try it
 
