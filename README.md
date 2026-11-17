@@ -1,5 +1,7 @@
 # Bio-Agent Knowledge Graph
 
+**Team: Random Agents**: Dr. Rizwan Qureshi, Dr. Hamza Hanif, Hara Moraitaki
+
 An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track). Licence: MIT. Paper: [paper/main.pdf](paper/main.pdf). Write-up: [docs/WRITEUP.md](docs/WRITEUP.md).
 
 **Contents:** 1 Executive summary · 2 Interactive workbench · 3 Ontological standards · 4 Render and GitHub deployment · 5 NVIDIA Brev (NemoClaw, OpenClaw, Hermes, pi) · 6 Server API · 7 Local development · 8 The challenge · 9 Methods, results and reference
@@ -357,14 +359,13 @@ Pruned v3 is trained on the kept edges only but scored on the same hidden edges 
 
 **Enrichment tried: GO and MONDO hierarchies** (`enrich/ontology.py`: 30,500 GO and 16,565 MONDO `subclass_of` edges, 5,834 ancestor nodes added to pruned v3; same hidden edges). Hard-negative AUROC against pruned v3: protein-disease 0.535 ± 0.002 (0.538), protein-GO 0.579 ± 0.003 (0.583), ligand-protein 0.608 (0.609), protein-protein 0.681 (0.682). **No gain**: with learned embeddings and no node features the model does not exploit the hierarchy. Enrichment stays in the repo as a tested tool but is not part of the submitted graphs.
 
-### Leakage rules (from the literature survey, `documents/muse-1.md`)
+### How the evaluation avoids leakage
 
-Published biomedical link-prediction scores are often inflated. Our results only count if we follow these:
-
-- **No reverse-edge leakage:** an edge and its reverse (B→A for A→B) must never fall in different splits. *(Implemented in `eval/split.py`: splits are by unordered pair.)*
-- **No enrichment leakage:** any edge pulled from an external KG (OptimusKG, Monarch, Open Targets...) must be checked against the held-out set and dropped if it duplicates a held-out edge, including near-duplicates and reverse relations.
-- **Hard negatives:** random negatives overstate performance (GNNs reported near 0.99 AUC fell to about 0.51 under degree-matched negatives). Also report degree-matched or two-hop negatives, and AUPRC as well as AUROC. *(Implemented in `eval/baseline.py`: random, same-type and degree-matched negatives are all reported.)*
-- Always record the split, negative-sampling scheme and seed with every reported number.
+- **Reverse edges stay together.** An edge and its reverse (B to A for A to B) always land in the same split, because splits are made on unordered pairs (`eval/split.py`).
+- **The agent never sees the hidden edges.** The graph is built from training edges only, and a guard in the ingest step rejects any edge from the test set (`train_only`).
+- **Outside sources are checked.** An edge brought in from another knowledge graph is compared with the held-out set and dropped if it duplicates one, in either direction (`leaked()` in `eval/split.py`; the feature runs report how many were dropped).
+- **Hard negatives.** Random negatives make scores look much better than they are, so we also report negatives matched on node type and on degree (`eval/baseline.py`), and AP as well as AUROC.
+- **Every number is reproducible.** Each reported result records its split, negative sampling scheme and seed.
 
 ## Design principles
 
@@ -399,23 +400,6 @@ Ideas from the survey, roughly in priority order. All are unverified claims from
 | PrimeKG | Skip | Superseded by OptimusKG |
 
 Check each source for overlap with held-out edges and for redistribution terms before including it in the submission.
-
-## Open questions for the organizers
-
-- How are held-out edges chosen (random, time-split, cold-start), and which edge types?
-- Is enrichment from KGs that may contain the held-out edges allowed, and how is leakage policed?
-- Which GNN, settings and metrics are used for scoring, and what is the exact Pharos baseline?
-- Are there graph size limits, and what format is required for submission and per-edge provenance?
-- How are usability, explainability and standards scored (rubric, judges or automated checks)?
-
-## Judging criteria
-
-| Criterion | Weight |
-|---|---|
-| Usability for non-KG experts | 40% |
-| Accuracy and pruning | 30% |
-| Explainability (edge lineage) | 20% |
-| Adherence to standards (Biolink, OBO) | 10% |
 
 ## Resources
 
