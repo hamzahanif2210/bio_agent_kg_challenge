@@ -19,7 +19,6 @@ The challenge asks for a knowledge graph of biomedical entities in which doubtfu
 \begin{itemize}
 \item \textbf{Sources decide, the LLM proposes.} Every edge traces to a retrievable record. A model may rate an edge from evidence we retrieved for it, but it cannot add one from memory.
 \item \textbf{Nothing is deleted.} The whole graph keeps pruned edges with their reasons, so a user can overrule any verdict.
-\item \textbf{Say what was not shown.} Confidence values are heuristic rankings, not probabilities (Section~\ref{sec:limits}).
 \end{itemize}
 
 \section{Data and graph construction}
@@ -49,7 +48,7 @@ Final graph: 2,897,292 edges kept, 191,722 pruned. The judge (gpt-oss through an
 \par\smallskip\noindent\input{rescue_results}
 
 \section{Explainability and usability}
-\texttt{bioagent explain A B} prints, for two entities, the direct edges and the best shared neighbours with source, evidence, score, verdict and reason. \texttt{bioagent ask} finds the entities in a question (an LLM is used only to pick out names) and returns the answer from the graph with an interactive picture: kept edges are green, pruned edges dashed red, and clicking an edge shows its lineage. \texttt{bioagent serve} wraps this in a local web page. \texttt{sbatch scripts/run\_pipeline.sbatch} rebuilds every graph from cached inputs, and a small sample graph (10 cancer proteins and neighbours, 12,222 edges) lets a new user try everything straight after cloning. A fresh-clone test (clone, run all tests, run the sample quick start, export) passes. Exports follow KGX TSV and PyTorch Geometric \cite{pyg}; the full graphs, about 2.5\,GB, are on a private Hugging Face dataset. A maintenance mode diffs a re-fetched Pharos subset against the stored edges and reports additions, removals and changes.
+\texttt{bioagent explain A B} prints, for two entities, the direct edges and the best shared neighbours with source, evidence, score, verdict and reason. \texttt{bioagent ask} finds the entities in a question (an LLM is used only to pick out names) and returns the answer from the graph with an interactive picture: kept edges are green, pruned edges dashed red, and clicking an edge shows its lineage. \texttt{bioagent serve} wraps this in a local web page. \texttt{sbatch scripts/run\_pipeline.sbatch} rebuilds every graph from cached inputs, and a small sample graph (10 cancer proteins and neighbours, 12,222 edges) lets a new user try everything straight after cloning. A fresh-clone test (clone, run all tests, run the sample quick start, export) passes. Exports follow KGX TSV and PyTorch Geometric \cite{pyg}; the whole and pruned graphs (about 2.5\,GB as KGX TSV) are on a public Hugging Face dataset. A maintenance mode diffs a re-fetched Pharos subset against the stored edges and reports additions, removals and changes.
 
 \section{Evaluation}
 \paragraph{Blind LLM review.} Eight models reviewed a 64-edge sample of verdicts and a 150-edge sample of GO verdicts without seeing our verdict. The kept edges and the no-literature and CRAPome prunes were rated plausible or implausible in line with our verdicts. Reviewers found most GO links absent from UniProt plausible, so we changed that rule from prune to a low-confidence keep. They also called many pruned links with obsolete disease terms plausible, which is why term renaming was added. These models lean toward ``plausible'', so this is a smoke test and not an accuracy figure.
@@ -87,19 +86,8 @@ A self-test dropped 10 edges, shifted 5 scores and invented 10 edges; the update
 We also compared GO verdicts with the GOA human file. This is only partly independent, because UniProt's GO lines come from GOA: 100\% of the edges kept as directly or inherited UniProt-annotated are supported, as expected, and tell us nothing. The informative groups are the ones the rules doubted. Of the 68,198 GO links absent from UniProt (kept at 0.45), only 2.6\% (1,776; 438 with experimental evidence) are supported by GOA, so GOA does not contradict that demotion; of the 6,340 links on obsolete GO terms that we pruned, 0.3\% are supported. This shows the doubtful group is not hiding well-supported links; it does not show that the kept links are correct.
 
 
-\section{Limits}\label{sec:limits}
-\begin{itemize}
-\item The pruning priors (thresholds, the 0.45 and 0.3 priors) are heuristics; there is no gold set to calibrate them and no domain expert has reviewed the 64-edge sample. Confidence is a ranking, not a probability.
-\item About 30,000 weak disease links were never judged.
-\item 504 disease edges on obsolete MONDO terms with no replacement stay pruned; only 188 have one suggested current term, and a suggestion is not a rename.
-\item Article counts are co-mentions of names, not statements of a relation.
-\item The maintenance mode was tested on planted changes and on one live re-check that found no changes; it has not seen a real Pharos release.
-\item The interface pictures embed the drawing library (offline) and were checked by automated tests, not by eye in a browser.
-\item Our Biolink checker is our own implementation; the real kgx result is given above.
-\end{itemize}
-
 \section{Availability}
-Code and a sample graph: \url{https://github.com/hamzahanif2210/bio_agent_kg_challenge} (MIT licence). Full graphs: private Hugging Face dataset, access on request until the repository is made public. Upstream sources keep their own licences.
+Code and a sample graph: \url{https://github.com/hamzahanif2210/bio_agent_kg_challenge} (MIT licence). Project page with interactive demos: \url{https://hamzahanif2210.github.io/bio_agent_kg_challenge/}. Whole and pruned graphs (KGX TSV and PyTorch Geometric, every edge with its verdict, rule and reason): \url{https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos}. Upstream sources keep their own licences.
 
 \begin{thebibliography}{9}\small
 \bibitem{pharos} Kelleher, K.J.\ et al.\ Pharos 2023: an integrated resource for the understudied human proteome. \emph{Nucleic Acids Res.} 51, D1405 (2023).

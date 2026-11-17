@@ -1,10 +1,28 @@
+<div align="center">
+
 # Bio-Agent Knowledge Graph
 
-**Team Random Agents:** Dr. Rizwan Qureshi, Dr. Hamza Hanif, Hara Moraitaki
+**Build, prune, explain and question a biomedical knowledge graph, and see why every link is there.**
 
-An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track), MIT licence.
+Team **Random Agents** &nbsp;·&nbsp; Dr. Rizwan Qureshi &nbsp;·&nbsp; Dr. Hamza Hanif &nbsp;·&nbsp; Hara Moraitaki
 
-[Project page](https://hamzahanif2210.github.io/bio_agent_kg_challenge/) · [Paper](paper/main.pdf) · [Write-up](docs/WRITEUP.md) · [Methods and results](docs/README.md) · [Full graphs on Hugging Face](https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos) · [Demo pictures](demo/README.md)
+[![Live demo](https://img.shields.io/badge/%E2%96%B6_Live_demo-open-1f7a4d?style=for-the-badge)](https://hamzahanif2210.github.io/bio_agent_kg_challenge/demo/egfr_nsclc.html)
+[![Project page](https://img.shields.io/badge/Project_page-visit-0b5cad?style=for-the-badge&logo=githubpages&logoColor=white)](https://hamzahanif2210.github.io/bio_agent_kg_challenge/)
+[![Paper](https://img.shields.io/badge/Paper-PDF-b3261e?style=for-the-badge&logo=readthedocs&logoColor=white)](paper/main.pdf)
+[![Full graphs](https://img.shields.io/badge/Full_graphs-Hugging_Face-ffcc00?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos)
+[![NVIDIA Brev](https://img.shields.io/badge/NVIDIA_Brev-NemoClaw_%C2%B7_OpenClaw_%C2%B7_Hermes-76b900?style=for-the-badge&logo=nvidia&logoColor=white)](deploy/README.md)
+[![Methods and results](https://img.shields.io/badge/Methods_%26_results-read-444444?style=for-the-badge)](docs/README.md)
+
+![edges](https://img.shields.io/badge/edges-3%2C089%2C014-1f7a4d)
+![kept](https://img.shields.io/badge/kept-2%2C897%2C292-2ca02c)
+![pruned](https://img.shields.io/badge/pruned-191%2C722-d62728)
+![Biolink](https://img.shields.io/badge/Biolink-4.4.6-0b5cad)
+![kgx validate](https://img.shields.io/badge/kgx_validate-passes-1f7a4d)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+</div>
+
+An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track). Every one of the 3,089,014 edges carries a keep or prune verdict with a rule, a reason and a confidence, and the agent runs in NVIDIA NemoClaw sandboxes with OpenClaw and Hermes.
 
 ## What it does
 
