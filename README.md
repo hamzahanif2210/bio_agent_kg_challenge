@@ -2,7 +2,7 @@
 
 An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track). Licence: MIT. Paper: [paper/main.pdf](paper/main.pdf). Write-up: [docs/WRITEUP.md](docs/WRITEUP.md).
 
-**Contents:** 1 Executive summary · 2 Interactive workbench · 3 Ontological standards · 4 Render and GitHub deployment · 5 NVIDIA Brev (NemoClaw, OpenClaw, Hermes, pi) · 6 Server API · 7 Local development · 8 The challenge · 9 Methods, results and reference · 10 Limits and honest caveats
+**Contents:** 1 Executive summary · 2 Interactive workbench · 3 Ontological standards · 4 Render and GitHub deployment · 5 NVIDIA Brev (NemoClaw, OpenClaw, Hermes, pi) · 6 Server API · 7 Local development · 8 The challenge · 9 Methods, results and reference
 
 ## 1. Executive summary
 
@@ -16,7 +16,7 @@ Knowledge graphs are powerful in biology and hard to build and use. This project
 | **Explain** | "Why does A connect to B?": sources, evidence, verdict, and paths through shared neighbours | `explain` command and `/api/explain` |
 | **Maintain** | Re-fetch targets, report added, removed and re-scored edges | Self-test passes (20 added, 5 re-scored, 10 removed found); one live re-check of 400 random targets found no changes |
 | **Standards** | Biolink 4.4.6 predicates, gene-protein split, OBO classes and IRIs on every node and edge | Real `kgx validate` 2.6.0 passes on the pruned graph |
-| **Link prediction** | Leakage-safe split, hard negatives, 3 seeds, 156 ablation runs | With text and sequence features the pruned graph beats plain Pharos on all four edge types; the gain comes from the features, not from pruning (see section 10) |
+| **Link prediction** | Leakage-safe split, hard negatives, 3 seeds, 156 ablation runs | With text and sequence features the pruned graph beats plain Pharos on all four edge types; the gain comes from the features (see section 9) |
 
 Judging criteria and where to look: **Usability** (40%) sections 2, 6, 7; **Accuracy and pruning** (30%) section 9 and [the paper](paper/main.pdf); **Explainability** (20%) `explain` and the edge pop-ups; **Standards** (10%) section 3.
 
@@ -55,28 +55,42 @@ The service binds `0.0.0.0` only because `HOST=0.0.0.0` is set in the blueprint;
 
 ## 5. Compiling to NVIDIA Brev (NemoClaw / OpenClaw / Nous Hermes) and the pi harness
 
-The agent is packaged as one [Agent Skill](agents/bioagent-kg/SKILL.md): a folder with `SKILL.md` (YAML `name` and `description`, then instructions). pi, OpenClaw (and therefore NemoClaw, which runs OpenClaw in a sandbox) and Hermes Agent read this same format, so "compiling" means copying the folder to where each one looks:
+The agent is packaged as one [Agent Skill](agents/bioagent-kg/SKILL.md): a folder with `SKILL.md` (YAML `name` and `description`, then instructions). pi, OpenClaw (and therefore NemoClaw, which runs OpenClaw or Hermes in an OpenShell sandbox) and Hermes Agent read this same format, so "compiling" means putting the folder where each one looks:
 
 ```bash
 python scripts/compile_agent.py pi --user  # ~/.agents/skills/ (project .agents/skills/ needs /trust)        ([pi](https://github.com/earendil-works/pi))
-python scripts/compile_agent.py openclaw   # skills/                (NemoClaw: use this one)
-python scripts/compile_agent.py nemoclaw   # same folder as openclaw
+python scripts/compile_agent.py openclaw   # skills/                (plain OpenClaw)
 python scripts/compile_agent.py hermes     # ~/.hermes/skills/research/
 # add --user to install for your whole account instead of this repository
+# inside a NemoClaw sandbox use NemoClaw's own command instead:  nemoclaw <sandbox> skill install agents/bioagent-kg
 ```
 
-**On a Brev instance** (Ubuntu): `bash deploy/brev/setup.sh nemoclaw` (or `openclaw`, `hermes`, `pi`). It installs the slim requirements, starts the web service on port 8000, installs the skill, and prints the agent's own next step:
+### On NVIDIA Brev with NemoClaw (verified 2026-11-17)
 
-| Harness | Install the agent | Then |
+Two commands on a fresh Brev instance (Ubuntu 24.04; a 4 vCPU / 16 GB CPU box is enough, because the model runs on NVIDIA's hosted endpoints):
+
+```bash
+bash deploy/brev/setup.sh nemoclaw            # host fixes, slim requirements, web service on port 8000
+export NVIDIA_API_KEY=nvapi-...               # your key from build.nvidia.com; never commit it
+export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 # only after reading NVIDIA's third-party software notice
+bash deploy/brev/nemoclaw.sh openclaw         # or: hermes
+```
+
+`nemoclaw.sh` installs NemoClaw, onboards a sandbox for the chosen agent, allows PyPI only (`nemoclaw <sandbox> policy add pypi`; the sandbox blocks the internet by default), uploads the repo, installs the skill with `nemoclaw <sandbox> skill install`, builds a virtual environment inside the sandbox and asks one test question.
+
+| Harness | Run on Brev | Test question: "How is EGFR connected to non-small cell lung carcinoma, and should I trust that link?" |
 |---|---|---|
-| NemoClaw | `curl -fsSL https://nvidia.com/nemoclaw.sh \| bash`, then `nemoclaw onboard` | `nemoclaw <name> connect`, then `openclaw tui` |
-| OpenClaw | see the OpenClaw docs, then `openclaw onboard` | skills reload automatically when `SKILL.md` changes |
-| Hermes Agent | [NousResearch/hermes-agent](https://github.com/nousresearch/hermes-agent) | start a new session; `/skills` lists it |
-| pi | `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (Node 22.19+) | run `pi` in the repo, `/login`, then `/skill:bioagent-kg BRCA1` |
+| **NemoClaw + OpenClaw** | Yes: NemoClaw v0.0.144, OpenShell 0.0.116, sandbox `bioagent`, model `nvidia/nemotron-3.5-super-vl-120b-a12b` | Correct: ran `explain`, reported the one direct edge (keep, 0.90, Open Targets 0.85), 43 shared neighbours, and noted it used the sample graph |
+| **NemoClaw + Hermes** | Yes: same instance, sandbox `bioagent-hermes`, same model, asked through Hermes's OpenAI-compatible API (`127.0.0.1:8642`, model `hermes-agent`) | Correct: same facts and verdict |
+| **pi** | Tested on a workstation, not on Brev (below) | Correct |
 
-**Tested with pi (2026-11-16):** pi 0.x from npm on Node 22 with the NRP gpt-oss model, using a `models.json` custom provider and `pi --skill agents/bioagent-kg --mode json "/skill:bioagent-kg ..."`. It ran our `explain` command and answered the EGFR to non-small cell lung carcinoma question correctly (one direct link, keep, 0.9, rule `disease_open_targets`). Two things to know: (1) pi skips a project's `.agents/skills/` until you trust the folder (`/trust`), which a non-interactive run cannot do, so use `--user` or `--skill <path>`; (2) in that run the model first tried `pip install` and read a demo file before finding the command, so the skill works but a small model is not always efficient. Run non-interactive pi with stdin closed (`< /dev/null`), or it waits for input.
+Instance: Brev `cpu-e2.4vcpu-16gb` (Nebius, USD 0.14 per hour). Transcripts are in `runs/brev/` (git-ignored).
 
-Notes: the agent's model key is entered in each harness's own login step and never goes through this repository. pi has no built-in permission system, so run it in a container or sandbox. The skill tells the agent to answer only from the graph tools. We tested the skill file format, the install script logic and the JSON endpoints (`tests/test_agent_and_api.py`); we have **not** run the NemoClaw, OpenClaw or Hermes installers, nor any of them on a Brev instance, so treat those steps as documented in each project's own guide, not as verified here.
+**Problems found on the stock Brev image, now handled by `setup.sh`:** (1) `strings` is missing (install `binutils`); (2) the default `umask 0002` leaves the home folder group-writable, which the NemoClaw installer rejects as an "unsafe executable directory" (`umask 022` and `chmod go-w` on every folder under `~`, including `~/.local/bin`); (3) `ufw` blocks the OpenShell Docker bridge, so the sandbox cannot reach the gateway (`sudo ufw allow from 172.18.0.0/16 to 172.18.0.1 port 8080 proto tcp`, the rule NemoClaw itself suggests; nothing is opened to the internet). Also: Nemotron 3.5 rejects OpenClaw's `--thinking low` (use the default), and pip refuses the sandbox's system Python (use a virtual environment).
+
+**pi (2026-11-16, workstation):** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (Node 22.19+), with the NRP gpt-oss model through a `models.json` custom provider and `pi --skill agents/bioagent-kg --mode json "/skill:bioagent-kg ..."`. It ran our `explain` command and answered the same question correctly. pi skips a project's `.agents/skills/` until you trust the folder (`/trust`), which a non-interactive run cannot do, so use `--user` or `--skill <path>`; in that run the model first tried `pip install` and read a demo file before finding the command, so a small model is not always efficient. Run non-interactive pi with stdin closed (`< /dev/null`).
+
+Notes: model keys go only into environment variables or each harness's own login step, never into this repository. NemoClaw sandboxes have network policies and an OpenShell gateway; pi has no permission system, so run it in a container. The skill tells the agent to answer only from the graph tools. Not tested: plain OpenClaw outside NemoClaw, and the full 3-million-edge graph on Brev (only the bundled sample graph was used).
 
 ## 6. Server API endpoints (`src/bioagent/qa/serve.py`)
 

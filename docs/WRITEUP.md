@@ -50,4 +50,4 @@ Open question: what delivery format and gold-set comparison they will use, so we
 
 ## Deployment and agent packaging
 
-The web workbench has a JSON API, a Dockerfile and a Render blueprint (sample graph). The query tools are packaged as one Agent Skill (`agents/bioagent-kg/SKILL.md`) installable for pi, OpenClaw/NemoClaw and Hermes with `scripts/compile_agent.py`, and `deploy/brev/setup.sh` prepares a Brev instance. The file format, installer and API are tested; the third-party agent installers were not run here.
+The web workbench has a JSON API, a Dockerfile and a Render blueprint (sample graph). The query tools are packaged as one Agent Skill (`agents/bioagent-kg/SKILL.md`) installable for pi, OpenClaw/NemoClaw and Hermes with `scripts/compile_agent.py`, and `deploy/brev/setup.sh` plus `deploy/brev/nemoclaw.sh` take a fresh NVIDIA Brev instance to a sandboxed agent. On Brev (2026-11-17, 4 vCPU CPU instance, NemoClaw v0.0.144, Nemotron 3.5 Super on NVIDIA endpoints) both NemoClaw runtimes, OpenClaw and Hermes, used the skill to answer "How is EGFR connected to non-small cell lung carcinoma?" correctly from the sample graph; pi was tested on a workstation.
