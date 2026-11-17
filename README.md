@@ -4,7 +4,7 @@
 
 An AI agent that builds, prunes, explains and answers questions over a Biolink-aligned biomedical knowledge graph made from [Pharos](https://pharos.nih.gov/about). Entry for the **Bio-Agent Knowledge Graph Construction Challenge** (open-source track), MIT licence.
 
-[Paper](paper/main.pdf) · [Write-up](docs/WRITEUP.md) · [Methods and results](docs/README.md) · [Full graphs on Hugging Face](https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos) · [Demo pictures](demo/README.md)
+[Project page](https://hamzahanif2210.github.io/bio_agent_kg_challenge/) · [Paper](paper/main.pdf) · [Write-up](docs/WRITEUP.md) · [Methods and results](docs/README.md) · [Full graphs on Hugging Face](https://huggingface.co/datasets/hamzahanif/bioagent-kg-pharos) · [Demo pictures](demo/README.md)
 
 ## What it does
 
