@@ -28,6 +28,7 @@ def to_html(edge_rows, nodes, title, path):
         pruned = r.get("verdict") == "prune"
         ve.append({"from": r["subject"], "to": r["object"], "arrows": "to", "dashes": pruned,
                    "color": "#d62728" if pruned else "#2ca02c", "label": str(r.get("predicate", "")).replace("biolink:", "")[:24],
+                   "vc": _num(r.get("verdict_confidence")), "keep0": not pruned,
                    "info": {"predicate": r.get("predicate"), "source": r.get("source"), "evidence": r.get("evidence"),
                             "source score": _num(r.get("confidence")), "verdict": r.get("verdict"),
                             "verdict confidence": _num(r.get("verdict_confidence")), "reason": r.get("reason"),
@@ -37,11 +38,23 @@ def to_html(edge_rows, nodes, title, path):
 <style>body{{font-family:system-ui,sans-serif;margin:0;display:flex;flex-direction:column;height:100vh}}
 h1{{font-size:1rem;margin:.6rem 1rem}}#g{{flex:1;border-top:1px solid #ccc}}#d{{padding:.6rem 1rem;border-top:1px solid #ccc;min-height:6rem;font-size:.9rem}}
 td{{padding:0 .8rem 0 0;vertical-align:top}}</style>
-<h1>{html.escape(title)}</h1><div id="g"></div><div id="d">Click an edge to see where it comes from and why it is kept or pruned.</div>
+<h1>{html.escape(title)}</h1>
+<div id="s" style="padding:.3rem 1rem;font-size:.9rem"><b>What if the cut-off were different?</b>
+<input id="t" type="range" min="0" max="1" step="0.05" value="0.4" style="vertical-align:middle;width:12rem">
+cut-off <b id="tv">0.40</b>: <span id="cnt"></span>
+<label><input id="hp" type="checkbox"> hide pruned</label> <button id="rs">original verdicts</button>
+<span style="color:#555"> Edges below the cut-off turn red and dashed. The pipeline's own cut-off is 0.40.</span></div><div id="g"></div><div id="d">Click an edge to see where it comes from and why it is kept or pruned.</div>
 <script>{open(VIS_JS, encoding="utf-8").read()}</script>
 <script>
 const nodes=new vis.DataSet({json.dumps(vn)}), edges=new vis.DataSet({json.dumps(ve)}.map((e,i)=>({{...e,id:i}})));
 const net=new vis.Network(document.getElementById('g'),{{nodes,edges}},{{physics:{{stabilization:true}},edges:{{font:{{size:9}},smooth:true}},nodes:{{shape:'dot',size:14,font:{{size:12}}}}}});
+const T=document.getElementById('t'),HP=document.getElementById('hp'),CNT=document.getElementById('cnt');
+function paint(useOrig){{const t=parseFloat(T.value);document.getElementById('tv').textContent=t.toFixed(2);let k=0,p=0;
+edges.update(edges.get().map(e=>{{const keep=useOrig||e.vc===null?e.keep0:e.vc>=t;keep?k++:p++;
+return {{id:e.id,dashes:!keep,color:keep?'#2ca02c':'#d62728',hidden:!keep&&HP.checked,info:{{...e.info,'at this cut-off':keep?'keep':'prune'}}}}}}));
+CNT.textContent=k+' kept, '+p+' pruned'+(useOrig?' (original verdicts)':'')}}
+T.oninput=()=>paint(false);HP.onchange=()=>paint(false);
+document.getElementById('rs').onclick=()=>{{T.value=0.4;paint(true)}};paint(true);
 net.on('click',p=>{{const d=document.getElementById('d');if(!p.edges.length)return;const i=edges.get(p.edges[0]).info;
 d.innerHTML='<table>'+Object.entries(i).filter(([k,v])=>v!==null&&v!==undefined).map(([k,v])=>'<tr><td><b>'+k+'</b></td><td>'+String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td></tr>').join('')+'</table>'}});
 </script>"""

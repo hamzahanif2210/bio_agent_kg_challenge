@@ -70,8 +70,9 @@ def neighbours(edges, nodes, node_id, top=15, kept_only=True):
     return out
 
 
-def answer(prefix, entities, graph=None):
-    """entities: list of names/ids. Returns (text, subgraph dict)."""
+def answer(prefix, entities, graph=None, hops=None, kept_only=True, min_conf=0.0, types=None, max_nodes=60):
+    """entities: list of names/ids. Returns (text, subgraph dict). With `hops` set, the multi-hop search with filters is used
+    (qa/hops.py); without it, the two-hop explanation (two names) or the best neighbours (one name)."""
     nodes, edges = graph if graph is not None else load(prefix, standard=True)
     idx = Index(nodes, edges)
     found, notes = [], []
@@ -85,6 +86,17 @@ def answer(prefix, entities, graph=None):
                          + (f" (other candidates: {', '.join(h['name'] for h in hits[1:4])})" if len(hits) > 1 else ""))
         found.append(hits[0]["id"])
     lines = list(notes)
+    if hops and found:
+        from bioagent.qa import hops as H
+        filt = H.describe_filters(kept_only, min_conf, types)
+        if len(found) >= 2:
+            r = H.connect(nodes, edges, found[0], found[1], hops, kept_only, min_conf, types)
+            lines += ["", H.format_paths(r, nodes, filt)]
+            rows = {(x["subject"], x["object"], x.get("predicate")): x for p in r["paths"] for x in p["edges"]}
+            return "\n".join(lines), {**r, "edge_rows": list(rows.values())}
+        r = H.neighbourhood(nodes, edges, found[0], hops, kept_only, min_conf, types, max_nodes=max_nodes)
+        lines += ["", H.format_neighbourhood(r, nodes, filt)]
+        return "\n".join(lines), r
     if len(found) >= 2:
         x = explain(prefix, found[0], found[1], graph=(nodes, edges))
         lines += ["", format_explanation(x)]
@@ -116,13 +128,16 @@ if __name__ == "__main__":
     ap.add_argument("--entities", nargs="+", help="skip the LLM and give the entities directly")
     ap.add_argument("--base-url"); ap.add_argument("--model", default="gpt-oss")
     ap.add_argument("--html", help="also write an interactive picture to this file")
+    ap.add_argument("--hops", type=int, help="search this many hops (more than two) with the filters below")
+    ap.add_argument("--min-conf", type=float, default=0.0); ap.add_argument("--include-pruned", action="store_true")
+    ap.add_argument("--types", nargs="+"); ap.add_argument("--max-nodes", type=int, default=60)
     a = ap.parse_args()
     ents = a.entities
     if not ents:
         from bioagent.ingest.harness import openai_llm
         ents = extract_entities(openai_llm(a.base_url, os.environ["LLM_API_KEY"]), a.model, a.question)
         print("entities from the question:", ents)
-    text, sub = answer(a.graph, ents)
+    text, sub = answer(a.graph, ents, hops=a.hops, kept_only=not a.include_pruned, min_conf=a.min_conf, types=a.types, max_nodes=a.max_nodes)
     print(text)
     if a.html and sub.get("edge_rows"):
         from bioagent.qa.visual import to_html

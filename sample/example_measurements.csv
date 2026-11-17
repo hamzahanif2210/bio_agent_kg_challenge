@@ -1,0 +1,6 @@
+subject,object,predicate,subject_category,object_category,score,pmid,source
+EGFR,non-small cell lung carcinoma,associated_with,protein,disease,0.85,15118125,exon 19 deletion cohort
+EGFR,GRB2,physically_interacts_with,protein,protein,0.7,,co-IP
+BRCA1,breast carcinoma,associated_with,protein,disease,0.9,7545954,linkage study
+MY-NOVEL-KINASE,non-small cell lung carcinoma,associated_with,protein,disease,0.35,,screen hit
+MY-NOVEL-KINASE,EGFR,physically_interacts_with,protein,protein,0.8,31234567,pulldown MS

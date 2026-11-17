@@ -3,6 +3,8 @@
   python -m bioagent ask "How is EGFR connected to non-small cell lung carcinoma?"
   python -m bioagent ask --entities BRCA1
   python -m bioagent explain EGFR "non-small cell lung carcinoma"
+  python -m bioagent ask --entities EGFR "lung cancer" --hops 3 --min-conf 0.6 --types Protein Disease
+  python -m bioagent ingest-csv my_table.csv   (your own measurements -> graph with verdicts)
   python -m bioagent serve --graph sample/sample.whole   (small web page: type names, get the answer and picture)
   python -m bioagent export                 (KGX + PyTorch Geometric files for the whole and pruned graphs)
 
@@ -24,6 +26,11 @@ def main(argv=None):
     a = sub.add_parser("ask", help="plain-language question -> the relevant part of the graph")
     a.add_argument("question", nargs="?"); a.add_argument("--entities", nargs="+")
     a.add_argument("--html", help="also write an interactive picture to this file")
+    a.add_argument("--hops", type=int, help="search up to this many hops (default: the two-hop explanation); enables the filters")
+    a.add_argument("--min-conf", type=float, default=0.0, help="with --hops: only edges with verdict confidence at or above this")
+    a.add_argument("--include-pruned", action="store_true", help="with --hops: also walk through pruned edges")
+    a.add_argument("--types", nargs="+", help="with --hops: node classes the walk may pass through, e.g. Protein Disease")
+    a.add_argument("--max-nodes", type=int, default=60, help="with --hops and one name: cap on nodes shown")
     a.add_argument("--model", default=os.environ.get("LLM_MODEL", "gpt-oss"))
     a.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
     x = sub.add_parser("explain", help="why does A connect to B? (sources, evidence, verdicts)")
@@ -32,6 +39,8 @@ def main(argv=None):
     v.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
     v.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="use 0.0.0.0 only behind your own proxy (hosted deploys)")
     v.add_argument("--model", default=os.environ.get("LLM_MODEL", "gpt-oss")); v.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL"))
+    c = sub.add_parser("ingest-csv", help="add your own table of relationships (subject, object, ...) with verdicts")
+    c.add_argument("file"); c.add_argument("--out", help="output prefix (default: <file>.whole)")
     sub.add_parser("export", help="write KGX + PyTorch Geometric files to exports/")
     args = ap.parse_args(argv)
 
@@ -46,7 +55,8 @@ def main(argv=None):
             ents = extract_entities(openai_llm(args.base_url, os.environ["LLM_API_KEY"]), args.model, args.question)
             print("entities from the question:", ents)
         graph = load(args.graph, standard=True)
-        text, sub = answer(args.graph, ents, graph=graph)
+        text, sub = answer(args.graph, ents, graph=graph, hops=args.hops, kept_only=not args.include_pruned,
+                           min_conf=args.min_conf, types=args.types, max_nodes=args.max_nodes)
         print(text)
         if args.html and sub.get("edge_rows"):
             from bioagent.qa.visual import to_html
@@ -62,6 +72,15 @@ def main(argv=None):
     elif args.cmd == "explain":
         from bioagent.provenance.explain import explain, format_explanation
         print(format_explanation(explain(args.graph, args.a, args.b)))
+    elif args.cmd == "ingest-csv":
+        from bioagent.ingest.csv_ingest import format_report, ingest_csv, save
+        from bioagent.provenance.explain import load
+        nodes, edges = load(args.graph)
+        n2, e2, rep = ingest_csv(args.file, nodes, edges)
+        out = args.out or os.path.splitext(args.file)[0] + ".whole"
+        save(n2, e2, out)
+        print(format_report(rep))
+        print(f"written: {out}.nodes.parquet, {out}.edges.parquet\nask about it:  python -m bioagent --graph {out} ask --entities NAME [NAME]")
     elif args.cmd == "export":
         import subprocess
         base = args.graph.rsplit(".", 1)[0]

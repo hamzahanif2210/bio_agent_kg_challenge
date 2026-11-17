@@ -14,7 +14,9 @@ the full pruned graph is `data/processed/pharos_pruned_v3.whole` (the default wh
 
 - What is known about a node: `python -m bioagent --graph sample/sample.whole ask --entities BRCA1`
 - How two things connect: `python -m bioagent --graph sample/sample.whole explain EGFR "non-small cell lung carcinoma"`
-- A picture: add `--html out.html` to `ask`.
+- A picture: add `--html out.html` to `ask`. It has a confidence cut-off slider.
+- More than two hops, with filters: `... ask --entities A B --hops 3 --min-conf 0.8 --types Protein Disease` (paths of up to 3 hops, kept edges only unless `--include-pruned`).
+- The user's own table: `... ingest-csv table.csv --out mine`, then `python -m bioagent --graph mine ask --entities NAME`. Columns: subject, object, optional predicate, score (0-1), pmid, source. Report the verdict and reason printed for each row.
 - Running web service with JSON endpoints: `python -m bioagent --graph sample/sample.whole serve --port 8000`, then
   `GET /api/ask?q=BRCA1`, `/api/explain?a=A&b=B`, `/api/node?q=NAME`, `/api/stats`, `/healthz`.
 

@@ -28,6 +28,9 @@ Judging criteria and where to look: **Usability** (40%) sections 2, 6, 7; **Accu
 |---|---|---|
 | Web workbench | Type a name or a comma-separated pair; get the answer text plus an interactive picture. Click an edge to see its source, evidence, verdict and reason. Works offline (the graph library is bundled). | `python -m bioagent serve` (`qa/serve.py`, `qa/visual.py`) |
 | Ask | Neighbours of a node, or the connection between two. With an LLM key, full sentences are accepted; the LLM only picks out the names, all facts come from the graph. | `python -m bioagent ask` (`qa/ask.py`) |
+| Multi-hop with filters | Everything within N hops of a node, or the shortest paths of up to N hops between two, strongest first. Filters: kept edges only, minimum confidence, node classes to pass through. The picture and the web page take the same options. | `ask --hops 3 --min-conf 0.8 --types Protein Disease` (`qa/hops.py`) |
+| Bring your own data | Add a CSV of your own measured relationships (`subject`, `object`, optional predicate, score, PMID, source). Names are matched to graph nodes, each row becomes an edge with provenance and gets a keep/prune verdict with a stated reason (score, PMID, whether Pharos already supports it, shared neighbours, unknown entity). | `python -m bioagent ingest-csv my.csv`, or the upload box on the web page (`ingest/csv_ingest.py`) |
+| Cut-off slider | In every picture, drag a confidence cut-off: edges below it turn red and dashed, with a live count of kept and pruned; one click returns to the pipeline's own verdicts. | `qa/visual.py` |
 | Explain | Lineage of any link: source, evidence, method, timestamp, verdict, rule, reason, and up to five paths through shared neighbours (two hops) | `python -m bioagent explain A B` (`provenance/explain.py`) |
 | Prune | Tiered pipeline described in section 9, re-runnable with one Slurm command | `clean/`, `scripts/run_pipeline.sbatch` |
 | Maintain | Re-fetch and diff: added, removed, re-scored | `ingest/update.py`, `scripts/update.sbatch` |
@@ -103,12 +106,13 @@ Read-only, JSON, no authentication; the server listens on `127.0.0.1:8000` unles
 | `GET /` | `q` (names, comma-separated, or a sentence if an LLM is set) | HTML page with the answer and picture |
 | `GET /pic/<n>` | | the interactive picture made for a page request |
 | `GET /healthz` | | `{"ok": true}` |
-| `GET /api/stats` | | node, edge, kept and pruned counts |
+| `GET /api/stats` | optional `threshold`, `g` | node, edge, kept and pruned counts; with `threshold`, the counts at that confidence cut-off |
 | `GET /api/node` | `q` (id or exact name) | the node record |
-| `GET /api/ask` | `q` | `{entities, answer, edges[]}`: best-supported kept neighbours (or the connection) with verdicts |
+| `GET /api/ask` | `q`; optional `hops` (1-5), `minconf`, `types` (comma list), `pruned=1`, `g` | `{entities, answer, edges[]}`: best-supported kept neighbours (or the connection) with verdicts; with `hops`, the multi-hop search and its filters |
+| `POST /api/upload` | CSV text as the body (2 MB at most) | per-row verdicts and a `graph_id`; pass it as `g=` to the other endpoints to query your graph. Each upload is a private copy in memory: it never changes the shared graph and is not written to disk |
 | `GET /api/explain` | `a`, `b` | direct edges and shared-neighbour paths between A and B with source, evidence, verdict, rule and reason |
 
-Errors come back as `{"error": "..."}` with status 400 or 404. Example: `curl 'http://127.0.0.1:8000/api/explain?a=EGFR&b=non-small%20cell%20lung%20carcinoma'`.
+The home page has the same options (hops, confidence, node types) and an upload box. Errors come back as `{"error": "..."}` with status 400 or 404. Example: `curl 'http://127.0.0.1:8000/api/explain?a=EGFR&b=non-small%20cell%20lung%20carcinoma'`.
 
 ## 7. Local development
 
@@ -125,6 +129,17 @@ python -m bioagent --graph sample/sample.whole explain EGFR "non-small cell lung
 ```
 
 With the full graph in place, drop `--graph sample/sample.whole` (the default is `data/processed/pharos_pruned_v3.whole`).
+
+More hops, with filters, and your own data:
+
+```bash
+python -m bioagent --graph sample/sample.whole ask --entities EGFR "non-small cell lung carcinoma" --hops 3 --min-conf 0.8   # shortest paths of up to 3 hops, strong edges only
+python -m bioagent --graph sample/sample.whole ask --entities BRCA1 --hops 2 --types Protein --html demo/brca1_2hop.html
+python -m bioagent --graph sample/sample.whole ingest-csv sample/example_measurements.csv --out mine     # your table -> graph with verdicts
+python -m bioagent --graph mine ask --entities MY-NOVEL-KINASE --hops 2
+```
+
+Verdict rules for uploaded rows: the starting value is your score (or 0.5), plus for a PMID, for a link Pharos already keeps and for shared neighbours, minus for an entity not in the graph or a link Pharos pruned; every reason is printed. Tests: `tests/test_csv_ingest.py`, `test_hops.py`, `test_upload_slider.py`.
 
 Open the `.html` file in a browser: nodes are coloured by type, green edges were kept and dashed red edges were pruned. **Click an edge** to see where it comes from and why it was kept or pruned.
 
